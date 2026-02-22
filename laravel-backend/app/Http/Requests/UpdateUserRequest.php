@@ -22,13 +22,14 @@ class UpdateUserRequest extends FormRequest
      */
     public function rules(): array
     {
-        // 1. Determine WHO is being edited.
-        // If an Admin calls the route /api/user/{user}, get that ID.
-        // If an Admin calls /api/coordinators/{coordinator}, get that ID.
-        // If no route param exists, default to the logged-in user (Self-Update).
 
-        $targetUser = $this->route('user') ?? $this->route('coordinator');
-        $idToIgnore = $targetUser ? $targetUser->id : auth()->id();
+        $targetUser = $this->route('user') ?? $this->route('coordinator') ?? $this->route('faculty') ?? $this->route('id');
+
+        $idToIgnore = is_object($targetUser) ? $targetUser->id : $targetUser;
+
+        if (!$idToIgnore) {
+            $idToIgnore = auth()->id();
+        }
 
         return [
             "fname" => ['required', 'string', 'max:255'],
@@ -40,7 +41,7 @@ class UpdateUserRequest extends FormRequest
             "unit" => ['required', 'string', 'max:100'],
             "academic_rank" => ['required', 'string', 'max:100'],
 
-            // 2. Ignore the ID of the person being edited
+
             "email" => ['required', 'string', 'unique:users,email,' . $idToIgnore],
         ];
     }

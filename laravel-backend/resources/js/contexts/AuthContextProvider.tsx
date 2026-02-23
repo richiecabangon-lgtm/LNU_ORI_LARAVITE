@@ -89,6 +89,7 @@ export default function AuthContextProvider({
     setLoading(true);
     setError(null);
     try {
+        await api.get("/sanctum/csrf-cookie");
       const { data, status } = await api.post("/api/login", {
         email,
         password,

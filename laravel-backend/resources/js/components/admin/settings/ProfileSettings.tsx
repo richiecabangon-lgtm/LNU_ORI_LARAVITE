@@ -165,18 +165,8 @@ export default function ProfileSettings() {
         payload.image_path = clean;
       }
 
-      let originalPath = user?.image_path;
-      if (originalPath) {
-        let cleanOrig = originalPath.replace(/\\/g, "/");
-        if (cleanOrig.includes("/storage/")) {
-            cleanOrig = cleanOrig.substring(cleanOrig.indexOf("/storage/") + 9);
-        }
-        originalPath = cleanOrig;
-      }
-
-      if (!payload.image_path || payload.image_path === originalPath) {
-        delete payload.image_path;
-      }
+      // We removed the 'delete payload.image_path' block here so the backend
+      // always receives the correct path and doesn't try to move a "null" file.
 
       const response = await axios.put(
         `/api/user/${formData.id}`,

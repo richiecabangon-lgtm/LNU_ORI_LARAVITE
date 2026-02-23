@@ -147,11 +147,13 @@ const CoordinatorSettings = () => {
                 <label
                   htmlFor="mi"
                   className="mt-5 block font-semibold text-gray-900"
+
                 >
                   Middle Initial
                 </label>
                 <div>
                   <input
+                    maxLength={1}
                     id="mi"
                     {...register("mi", {
                       maxLength: {

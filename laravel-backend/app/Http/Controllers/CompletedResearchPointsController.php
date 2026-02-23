@@ -16,11 +16,23 @@ class CompletedResearchPointsController extends Controller
 
         return $this->success($points);
     }
+
     public function update(Request $request)
     {
+        // 1. Try to get the very first points record
         $points = CompletedResearchPoints::first();
 
-        $points->update(['points' => $request->points]);
+        // 2. THE FIX: If it doesn't exist (returns null), CREATE it instead of updating!
+        if (!$points) {
+            CompletedResearchPoints::create([
+                'points' => $request->points
+            ]);
+        } else {
+            // 3. If it DOES exist, it is safe to update it
+            $points->update([
+                'points' => $request->points
+            ]);
+        }
 
         return $this->success('', 'Points updated successfully');
     }

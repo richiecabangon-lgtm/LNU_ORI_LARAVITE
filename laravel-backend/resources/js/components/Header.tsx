@@ -24,17 +24,16 @@ interface HeaderProps {
 
 const getImageUrl = (path: string | null | undefined) => {
   if (!path) return "https://via.placeholder.com/150";
-  
-  // If the backend sends the wrong localhost URL (missing port), fix it
+
+
   if (path.startsWith("http://localhost/storage")) {
       return path.replace("http://localhost/", "http://localhost:8000/");
   }
 
-  // If it's already a full valid URL, leave it alone
-  if (path.startsWith("http")) return path; 
 
-  // If it's just a filename, add the correct local prefix
-  return `http://localhost:8000/storage/${path}`; 
+  if (path.startsWith("http")) return path;
+
+  return `http://localhost:8000/storage/${path}`;
 };
 
 const Header = ({ toggleMenu, openMenu }: HeaderProps) => {

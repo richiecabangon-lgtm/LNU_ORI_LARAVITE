@@ -48,20 +48,28 @@ function Adduser() {
   const college = watch("college");
 
   useEffect(() => {
+    // Only fetch if a valid college is actually selected (not an empty string)
     if (college) {
       const getUnits = async () => {
         try {
-          const response = await api("api/units", {
+          // FIX 1: Added explicit .get() and absolute path with leading slash '/'
+          const response = await api.get("/api/units", {
             params: {
               college: college,
             },
           });
-          setUnits(response.data.data);
+
+          // Fallback check: sometimes Laravel returns response.data, sometimes response.data.data
+          const fetchedUnits = response.data.data || response.data || [];
+          setUnits(fetchedUnits);
         } catch (error) {
           console.error("Error fetching units", error);
         }
       };
       getUnits();
+    } else {
+      // Clear units if they switch back to the empty placeholder
+      setUnits(null);
     }
   }, [college]);
 
@@ -129,6 +137,7 @@ function Adduser() {
               Middle Initial
             </label>
             <input
+            maxLength={1}
               {...register("mi", {
                 maxLength: {
                   message: "Enter your middle initial only.",
@@ -174,30 +183,33 @@ function Adduser() {
           </div>
         </div>
 
-        <label
-          htmlFor="department"
-          className="mb-2 block font-bold text-gray-700"
-        >
-          Department
-        </label>
-        <select
-          {...register("college", { required: "This field is required." })}
-          className="w-full rounded-md border px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500"
-        >
-          <option defaultValue="Select Department">
-            Select College Department
-          </option>
-          {colleges?.map((college) => (
-            <option key={college.id} value={college.college}>
-              {college.college}
+        <div className="mt-4">
+          <label
+            htmlFor="department"
+            className="mb-2 block font-bold text-gray-700"
+          >
+            Department
+          </label>
+          <select
+            {...register("college", { required: "This field is required." })}
+            className="w-full rounded-md border px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500"
+          >
+            {/* FIX 2: Set an empty string value to prevent fake backend requests */}
+            <option value="" disabled>
+              Select College Department
             </option>
-          ))}
-        </select>
-        {errors.college?.message && (
-          <span className="p-2 text-sm text-red-700">
-            {errors.college?.message}
-          </span>
-        )}
+            {colleges?.map((college) => (
+              <option key={college.id} value={college.college}>
+                {college.college}
+              </option>
+            ))}
+          </select>
+          {errors.college?.message && (
+            <span className="p-2 text-sm text-red-700">
+              {errors.college?.message}
+            </span>
+          )}
+        </div>
 
         <div className="mt-4">
           <label htmlFor="unit" className="mb-2 block font-bold text-gray-700">
@@ -206,8 +218,10 @@ function Adduser() {
           <select
             {...register("unit", { required: "This field is required." })}
             className="w-full rounded-md border px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500"
+            disabled={!college || units?.length === 0} // Optional visual safety feature
           >
-            <option defaultValue="Select a unit">Select a unit</option>
+            {/* FIX 2: Added value="" disabled */}
+            <option value="" disabled>Select a unit</option>
             {units?.map((unit) => (
               <option key={unit.id} value={unit.unit}>
                 {unit.unit}
@@ -234,7 +248,8 @@ function Adduser() {
             })}
             className="w-full rounded-md border px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500"
           >
-            <option defaultValue="Select an academic rank">
+            {/* FIX 2: Added value="" disabled */}
+            <option value="" disabled>
               Select an academic rank
             </option>
             {AcademicRanksOptions.map((rank) => (
@@ -289,7 +304,6 @@ function Adduser() {
               required: "This field is required.",
             })}
             className="w-full rounded-md border px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500"
-            // required
           />
 
           {errors.password?.message && (
@@ -310,7 +324,7 @@ function Adduser() {
             <button
               type="submit"
               disabled
-              className="align-items-center w-full rounded-md bg-blue-500 px-4 py-2 font-bold text-white"
+              className="align-items-center w-full rounded-md bg-blue-500 px-4 py-2 font-bold text-white cursor-not-allowed"
             >
               Registering...
             </button>

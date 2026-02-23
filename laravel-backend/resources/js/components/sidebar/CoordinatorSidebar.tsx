@@ -20,10 +20,18 @@ const CoordinatorSidebar = () => {
 
   return (
     <aside className="left-0 top-0 z-20 hidden h-full w-60 bg-primary text-white shadow-lg md:fixed md:block">
-      <div className="relative flex h-[3.8rem] items-center justify-center">
-        <h1 className="text-xl">Coordinator</h1>
-        <div className="absolute bottom-0 left-1/2 h-[1px] w-11/12 -translate-x-1/2 bg-white"></div>
-      </div>
+        <div className="relative flex h-[3.8rem] items-center justify-center">
+            <div className="absolute left-8 top-1/2 h-10 w-10 -translate-x-1/2 -translate-y-1/2 overflow-hidden rounded-full ">
+              <img
+                src="/favicon.ico"
+                alt="Profile"
+                loading="lazy"
+                className="absolute object-contain"
+              />
+            </div>
+            <h1 className="text-xl">Coordinator</h1>
+            <div className="absolute bottom-0 left-1/2 h-[1px] w-11/12 -translate-x-1/2 bg-white"></div>
+        </div>
 
       <nav>
         <ul className="mt-4">

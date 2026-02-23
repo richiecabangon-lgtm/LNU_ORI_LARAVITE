@@ -9,6 +9,14 @@ const FacultySidebar = () => {
   return (
     <aside className="left-0 top-0 hidden h-full w-60 bg-primary text-white shadow-lg md:fixed md:block">
       <div className="relative flex h-[3.8rem] items-center justify-center">
+        <div className="absolute left-8 top-1/2 h-10 w-10 -translate-x-1/2 -translate-y-1/2 overflow-hidden rounded-full ">
+            <img
+            src="/favicon.ico"
+            alt="Profile"
+            loading="lazy"
+            className="absolute object-contain"
+            />
+        </div>
         <h1 className="text-xl">Faculty</h1>
         <div className="absolute bottom-0 left-1/2 h-[1px] w-11/12 -translate-x-1/2 bg-white"></div>
       </div>

@@ -46,8 +46,6 @@ class UserController extends Controller
        $totalCOE = User::query()->role(RoleEnum::FACULTY)->where('college', 'COE')->count();
        $totalCAS = User::query()->role(RoleEnum::FACULTY)->where('college', 'CAS')->count();
 
-
-
        $faculty = $faculty->map(function ($user) {
         $user->name = $user->getFullName();
         $user->rating = $this->rating($user->totalPoints ?? 0);
@@ -55,8 +53,6 @@ class UserController extends Controller
 
         return $user;
     });
-
-        //$count = $faculties->researchMonitoringForm->count();
 
         return $this->success([
             'total_cas' => $totalCAS,
@@ -73,33 +69,29 @@ class UserController extends Controller
 
     public function update(User $user, UpdateUserRequest $request)
     {
-        $updatedImage = '';
+        // THE FIX: Default to the user's EXISTING image path!
+        // This ensures the image isn't accidentally deleted if they only update their name.
+        $updatedImage = $user->getRawOriginal('image_path');
 
-        $filePath = Str::after($request->image_path,config('myconfig.app_url').'/storage/');
+        // Only process the image if a new image_path was actually sent in the request
+        if ($request->has('image_path') && !empty($request->image_path)) {
 
-        if(empty($user->image_path)){
+            $filePath = Str::after($request->image_path, config('myconfig.app_url').'/storage/');
 
-            $filePath = $request->image_path;
-        }
+            if ($filePath && Storage::disk('public')->exists($filePath)) {
+                // Check if the uploaded image is different from the current one
+                if (!Str::contains($request->image_path, $user->getRawOriginal('image_path'))) {
 
-        if(Storage::disk('public')->exists($filePath)){
+                    // It's a new image, so move it to the final storage folder
+                    $updatedImage = $this->moveToStorage($request->image_path);
 
-            if(Str::contains($request->image_path, $user->getRawOriginal('image_path'))){
-
-                 $updatedImage = $user->getRawOriginal('image_path');
-
-            } else {
-
-                $updatedImage = $this->moveToStorage($request->image_path);
-
-                if(Storage::disk('public')->exists($user->getRawOriginal('image_path'))){
-
-                    Storage::disk('public')->delete($user->getRawOriginal('image_path'));
-
+                    // Safely delete the old image from the hard drive
+                    $oldImagePath = $user->getRawOriginal('image_path');
+                    if ($oldImagePath && Storage::disk('public')->exists($oldImagePath)) {
+                        Storage::disk('public')->delete($oldImagePath);
+                    }
                 }
-
             }
-
         }
 
         $user->update([
@@ -107,7 +99,7 @@ class UserController extends Controller
             'lname' => $request->lname,
             'mi' => $request->mi,
             'suffix' => $request->suffix,
-            'image_path' => $updatedImage,
+            'image_path' => $updatedImage, // Now correctly saves either the NEW or the OLD image
             'academic_rank' => $request->academic_rank,
             'college' => $request->college,
             'unit' => $request->unit,
@@ -116,6 +108,7 @@ class UserController extends Controller
 
         return $this->success($user, 'Faculty Updated Successfully');
     }
+
     public function assignCoordinatorRole(User $user, Request $request)
     {
         $request->validate([
@@ -136,7 +129,6 @@ class UserController extends Controller
         $coordinator->load('roles');
 
         return $this->success(['user'=>$user, 'coordinator' => $coordinator]);
-
     }
 
     public function revokeCoordinatorRole(User $user)
@@ -155,6 +147,7 @@ class UserController extends Controller
 
         return $this->success($coordinator);
     }
+
     public function store(AddFacultyRequest $req)
     {
         $imagePath = '';

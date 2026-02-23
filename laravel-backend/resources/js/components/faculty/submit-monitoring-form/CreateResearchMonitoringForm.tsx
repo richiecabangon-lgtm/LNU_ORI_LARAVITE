@@ -19,7 +19,7 @@ import {
 } from "../../shared/types/types";
 import axios from "axios";
 import LoadingSpinner from "../../shared/components/LoadingSpinner";
-import AlertMessageModal from "../../shared/components/AlertMessageModal";
+import { useToast } from "../../../hooks/useToast";
 import { useNavigate } from "react-router-dom";
 import { useValidateDocument } from "./useValidateDocument";
 import { useMutationResearchMonitoringForm } from "../../admin/monitoring-form/hooks/hook";
@@ -50,6 +50,7 @@ export type PayloadType = {
 };
 
 const CreateResearchMonitoringForm = () => {
+  const toast = useToast();
   const {
     register,
     clearErrors,
@@ -181,10 +182,6 @@ const CreateResearchMonitoringForm = () => {
   const [fileList, setFileList] = useState<File[]>([]);
   const [step, setStep] = useState(1);
   const [submitLoading, setSubmitLoading] = useState(false);
-  const [alertModal, setAlertModal] = useState<{
-    open: boolean;
-    message: string;
-  }>({ open: false, message: "" });
 
   const navigate = useNavigate();
   useEffect(() => {
@@ -271,7 +268,7 @@ const CreateResearchMonitoringForm = () => {
               const message =
                 error.response?.data?.message ||
                 "Validation failed. Click Next to retry.";
-              setAlertModal({ open: true, message });
+              toast.error(message);
             }
           },
         },
@@ -291,19 +288,26 @@ const CreateResearchMonitoringForm = () => {
       try {
         await createResearchForm.mutateAsync({ fieldKey, payload });
         setSubmitLoading(false);
-        alert("Research form submitted successfully!");
+        toast.success("Research form submitted successfully!");
         navigate(-1);
       } catch (error) {
         setSubmitLoading(false);
-        if (axios.isAxiosError(error) && error.response?.data?.errors) {
-          Object.entries(error.response.data.errors).forEach(
-            ([key, messages]) => {
-              setError(key as keyof FormData, {
-                type: "server",
-                message: Array.isArray(messages) ? messages[0] : messages,
-              });
-            },
-          );
+        if (axios.isAxiosError(error)) {
+          if (error.response?.data?.errors) {
+            Object.entries(error.response.data.errors).forEach(
+              ([key, messages]) => {
+                setError(key as keyof FormData, {
+                  type: "server",
+                  message: Array.isArray(messages) ? messages[0] : messages,
+                });
+              },
+            );
+          }
+          if (error.response?.data?.message) {
+            toast.error(error.response.data.message);
+          }
+        } else {
+          toast.error("Failed to submit. Please try again.");
         }
       }
     }
@@ -393,12 +397,6 @@ const CreateResearchMonitoringForm = () => {
       <LoadingSpinner
         isLoading={submitLoading}
         text="Saving your document..."
-      />
-      <AlertMessageModal
-        isOpen={alertModal.open}
-        message={alertModal.message}
-        onClose={() => setAlertModal((prev) => ({ ...prev, open: false }))}
-        autoCloseMs={5000}
       />
     </section>
   );

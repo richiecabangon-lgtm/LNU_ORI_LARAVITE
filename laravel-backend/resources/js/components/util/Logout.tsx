@@ -4,9 +4,11 @@ import { useState } from "react";
 import LoadingSpinner from "../shared/components/LoadingSpinner";
 import { useNavigate } from "react-router-dom";
 import { useAuthContextProvider } from "../../hooks/hooks";
+import { useToast } from "../../hooks/useToast";
 import ConfirmationModal from "../shared/components/ConfirmationModal";
 
 const Logout = ({ style }: { style: string }) => {
+  const toast = useToast();
   const [isLoading, setIsLoading] = useState(false);
   const [openModal, setOpenModal] = useState(false);
   const navigate = useNavigate();
@@ -16,6 +18,7 @@ const Logout = ({ style }: { style: string }) => {
     setIsLoading(true);
     try {
       await api.post("/api/logout");
+      toast.success("Successfully logged out.");
       setUser(null);
       navigate("/login");
     } catch (error) {

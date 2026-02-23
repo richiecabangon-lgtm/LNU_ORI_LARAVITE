@@ -1,6 +1,7 @@
 import React, { useState } from "react";
 import { useMutateBackup, useUploadFiles } from "../monitoring-form/hooks/hook";
 import DropzoneComponent from "../../shared/components/DropzoneComponent";
+import { useToast } from "../../../hooks/useToast";
 import { BiTrash } from "react-icons/bi";
 import formatBytes from "../../util/formatBytes";
 
@@ -49,7 +50,7 @@ type FileListType = {
 // };
 
 const Backup = () => {
-  //const { backupList, isLoading: backupLoading } = useGetBackupList();
+  const toast = useToast();
   const { CreateBackup, RestoreBackup } = useMutateBackup();
 
   const { mutate: UploadFiles } = useUploadFiles();
@@ -61,14 +62,21 @@ const Backup = () => {
   //const [openDropdownRow, setOpenDropdownRow] = useState<number | null>(null);
   const [fileList, setFileList] = useState<FileListType | null>(null);
 
-  const handleBackup = async () => {
-    await createBackup();
+  const handleBackup = () => {
+    createBackup(undefined, {
+      onSuccess: () => toast.success("Backup Data Successfully."),
+      onError: () => toast.error("Backup failed. Please try again."),
+    });
   };
 
   const handleRestore = async () => {
-    await restoreBackup.mutateAsync(fileList?.filePath as string);
-
-    setFileList(null);
+    try {
+      await restoreBackup.mutateAsync(fileList?.filePath as string);
+      toast.success("Data Restored Successfully.");
+      setFileList(null);
+    } catch {
+      toast.error("Restore failed. Please try again.");
+    }
   };
 
   // const handleDelete = async (backupId: number) => {

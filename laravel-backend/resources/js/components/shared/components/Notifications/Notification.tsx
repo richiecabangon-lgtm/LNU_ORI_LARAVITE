@@ -15,14 +15,25 @@ interface Notification {
 
 dayjs.extend(relativeTime);
 
-const getImageUrl = (path: string | null | undefined) => {
-  if (!path) return "https://via.placeholder.com/150";
-  // Fix localhost missing port
-  if (path.startsWith("http://localhost/storage")) {
-    return path.replace("http://localhost/", "http://localhost:8000/");
+const getImageUrl = (path: string | null | undefined): string => {
+  if (!path || typeof path !== "string") return "";
+  try {
+    let cleanPath = path.replace(/\\/g, "/");
+    // If full URL (localhost, 127.0.0.1, or any domain), extract pathname for relative URL
+    if (cleanPath.startsWith("http")) {
+      const url = new URL(cleanPath);
+      return url.pathname + (url.search || "");
+    }
+    if (cleanPath.includes("/storage/")) {
+      cleanPath = cleanPath.substring(cleanPath.indexOf("/storage/"));
+    } else {
+      cleanPath = cleanPath.replace(/^public\//, "").replace(/^\//, "");
+      cleanPath = `/storage/${cleanPath}`;
+    }
+    return cleanPath;
+  } catch {
+    return "";
   }
-  if (path.startsWith("http")) return path;
-  return `http://localhost:8000/storage/${path}`;
 };
 
 const Notification = ({
@@ -109,23 +120,26 @@ const Notification = ({
                     className="grid cursor-pointer grid-cols-6 border-b px-3 py-3 hover:bg-gray-200 sm:px-5 sm:py-4"
                     onClick={() => handleMarkAsRead(notif.id)}
                   >
-                    <div className="relative size-10 rounded-full bg-green-500">
-                      {notif.image_path ? (
+                    <div className="relative flex size-10 items-center justify-center overflow-hidden rounded-full bg-green-500">
+                      {notif.image_path && getImageUrl(notif.image_path) && (
                         <img
                           src={getImageUrl(notif.image_path)}
-                          className="relative object-contain"
+                          alt=""
+                          className="absolute inset-0 size-full object-cover"
+                          onError={(e) => {
+                            e.currentTarget.style.display = "none";
+                          }}
                         />
-                      ) : (
-                        <>
-                          {notif.name ? (
-                            <div className="absolute right-3 top-2 font-bold text-white">
-                              {notif.name?.[0].toUpperCase()}
-                            </div>
-                          ) : (
-                            <IoMdInformationCircle className="absolute size-10 text-white" />
-                          )}
-                        </>
                       )}
+                      <div className="flex size-full items-center justify-center">
+                        {notif.name ? (
+                          <span className="text-sm font-bold text-white">
+                            {notif.name?.[0]?.toUpperCase() ?? "?"}
+                          </span>
+                        ) : (
+                          <IoMdInformationCircle className="size-6 text-white" />
+                        )}
+                      </div>
                     </div>
 
                     <div className="col-span-4">

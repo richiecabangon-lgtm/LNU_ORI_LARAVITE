@@ -34,7 +34,7 @@ export default function LandingPage() {
       {/* About Section */}
       <section
         id="about"
-        className="-z-50 flex min-h-screen flex-1 items-start justify-between px-6 pt-20 pb-10 scroll-mt-24 sm:px-10 md:items-center md:px-14"
+        className="-z-50 flex min-h-screen flex-1 items-start justify-between px-6 pt-6 pb-10 scroll-mt-0 sm:px-10 md:items-center md:px-14"
       >
         <div className="w-full rounded-3xl bg-gray-50 p-4 text-lg shadow-custom md:w-auto">
           <h1 className="mb-3 text-4xl font-bold text-[#070367]">About</h1>

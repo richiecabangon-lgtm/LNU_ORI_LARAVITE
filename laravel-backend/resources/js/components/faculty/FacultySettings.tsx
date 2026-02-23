@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import { useAuthContextProvider } from "../../hooks/hooks";
+import { useToast } from "../../hooks/useToast";
 import Button from "../shared/components/Button";
 import { FaCamera } from "react-icons/fa";
 import { User } from "../shared/types/types";
@@ -36,6 +37,7 @@ const getImageUrl = (path: string | null | undefined) => {
   return `http://localhost:8000/storage/${path}`; 
 };
 const FacultySettings = () => {
+  const toast = useToast();
   const [data, setData] = useState<User>(initialData);
   const inputFile = useRef<HTMLInputElement | null>(null);
   const [updateAccountLoading, setUpdateAccountLoading] = useState(false);
@@ -47,6 +49,24 @@ const FacultySettings = () => {
     confirmPassword: "",
   });
   const { user, setError, setUser } = useAuthContextProvider();
+
+  const hasAccountChanges = user
+    ? (data.fname ?? "") !== (user.fname ?? "") ||
+      (data.lname ?? "") !== (user.lname ?? "") ||
+      (data.mi ?? "") !== (user.mi ?? "") ||
+      (data.suffix ?? "") !== (user.suffix ?? "") ||
+      (data.email ?? "") !== (user.email ?? "") ||
+      (data.image_path ?? "") !== (user.image_path ?? "")
+    : false;
+
+  const currentPwd = (password.currentPassword ?? "").trim();
+  const newPwd = (password.newPassword ?? "").trim();
+  const confirmPwd = (password.confirmPassword ?? "").trim();
+  const allFieldsFilled = currentPwd.length > 0 && newPwd.length > 0 && confirmPwd.length > 0;
+  const passwordsMatch = newPwd === confirmPwd;
+  const newPasswordValid = newPwd.length >= 8;
+  const hasPasswordChanges =
+    allFieldsFilled && passwordsMatch && newPasswordValid;
 
   useEffect(() => {
     if (user) {
@@ -108,15 +128,39 @@ const FacultySettings = () => {
   };
   const handleUpdate = async (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();
-    if (updateAccountLoading) return;
+    if (updateAccountLoading || !hasAccountChanges) return;
     try {
       setUpdateAccountLoading(true);
       const response = await api.put(`/api/coordinators/${data.id}`, data);
-      setUser(response.data.data);
-      sessionStorage.setItem("User", JSON.stringify(response.data.data));
+      const updatedUser = response.data.data;
+      setUser(updatedUser);
+      sessionStorage.setItem("User", JSON.stringify(updatedUser));
+      setData({
+        fname: updatedUser.fname,
+        lname: updatedUser.lname,
+        mi: updatedUser.mi,
+        email: updatedUser.email,
+        image_path: updatedUser.image_path,
+        academic_rank: updatedUser.academic_rank,
+        unit: updatedUser.unit,
+        suffix: updatedUser.suffix,
+        id: updatedUser.id,
+        college: updatedUser.college,
+        created_at: updatedUser.created_at,
+        deleted_at: updatedUser.deleted_at,
+        updated_at: updatedUser.updated_at,
+        roles: updatedUser.roles || [],
+      });
+      toast.success("Account updated successfully.");
     } catch (error) {
       if (axios.isAxiosError(error)) {
-        setError(error.response?.data.message);
+        const msg =
+          error.response?.data?.message ||
+          (error.response?.data?.errors &&
+            Object.values(error.response.data.errors).flat()[0]);
+        toast.error(typeof msg === "string" ? msg : "Failed to update account. Please try again.");
+      } else {
+        toast.error("Failed to update account. Please try again.");
       }
     } finally {
       setUpdateAccountLoading(false);
@@ -124,14 +168,30 @@ const FacultySettings = () => {
   };
 
   const handleSubmit = async () => {
-    if (updatePasswordLoading) return;
+    if (updatePasswordLoading || !hasPasswordChanges) return;
+    const currentPwdVal = (password.currentPassword ?? "").trim();
+    const newPwdVal = (password.newPassword ?? "").trim();
+    const confirmPwdVal = (password.confirmPassword ?? "").trim();
+    if (currentPwdVal.length === 0 || newPwdVal.length === 0 || confirmPwdVal.length === 0) {
+      toast.error("All password fields are required.");
+      return;
+    }
+    if (newPwdVal.length < 8) {
+      toast.error("New password must be at least 8 characters.");
+      return;
+    }
+    if (newPwdVal !== confirmPwdVal) {
+      toast.error("New password and confirm password do not match.");
+      return;
+    }
     try {
       setUpdatePasswordLoading(true);
       await api.post("/api/password-reset/" + data?.id, {
-        current_password: password.currentPassword,
-        password: password.newPassword,
-        password_confirmation: password.confirmPassword,
+        current_password: currentPwdVal,
+        password: newPwdVal,
+        password_confirmation: confirmPwdVal,
       });
+      toast.success("Password updated successfully.");
       setPassword({
         newPassword: "",
         confirmPassword: "",
@@ -139,7 +199,15 @@ const FacultySettings = () => {
       });
     } catch (error) {
       if (axios.isAxiosError(error)) {
-        setError(error.response?.data.message);
+        const res = error.response?.data;
+        const msg =
+          res?.message ||
+          res?.errors?.current_password?.[0] ||
+          res?.errors?.password?.[0] ||
+          (res?.errors && Object.values(res.errors).flat()[0]);
+        toast.error(typeof msg === "string" ? msg : "Failed to update password. Please try again.");
+      } else {
+        toast.error("Failed to update password. Please try again.");
       }
       setPassword({
         newPassword: "",
@@ -160,13 +228,15 @@ const FacultySettings = () => {
             <h2 className="text-xl font-semibold">Account Information</h2>
             <p className="mt-2 text-sm text-gray-500">Edit your profile</p>
             <div className="relative mt-6 inline-block sm:mt-8 lg:mt-10">
-              <div className="relative h-20 w-20 overflow-hidden rounded-full border-2 border-blue-500">
+              <div
+                onClick={() => inputFile.current?.click()}
+                className="relative h-20 w-20 cursor-pointer overflow-hidden rounded-full border-2 border-blue-500"
+              >
                 <img
                   src={getImageUrl(data.image_path)}
                   alt="Profile"
                   loading="lazy"
-                  className="h-full w-full cursor-pointer object-cover"
-                  onClick={() => inputFile.current?.click()}
+                  className="h-full w-full object-cover"
                 />
                 <input
                   onChange={handleUpload}
@@ -176,10 +246,12 @@ const FacultySettings = () => {
                   accept="image/jpeg, image/png"
                 />
               </div>
-              <FaCamera
+              <div
                 onClick={() => inputFile.current?.click()}
-                className="absolute bottom-0 right-0 cursor-pointer rounded-full bg-blue-500 p-1.5 text-white hover:bg-blue-600"
-              />
+                className="absolute -bottom-1 -right-1 z-10 grid h-8 w-8 cursor-pointer place-content-center rounded-full bg-blue-500 hover:bg-blue-600"
+              >
+                <FaCamera className="text-white" />
+              </div>
             </div>
 
             <form onSubmit={handleUpdate} className="mt-8 w-full lg:mt-10">
@@ -252,8 +324,12 @@ const FacultySettings = () => {
                 />
                 <Button
                   type="submit"
-                  isDisabled={updateAccountLoading}
-                  className="mt-5 w-full rounded-sm bg-blue-500 px-2 py-2 text-sm font-semibold text-white hover:bg-blue-800 disabled:cursor-not-allowed lg:w-full"
+                  isDisabled={updateAccountLoading || !hasAccountChanges}
+                  className={`mt-5 w-full rounded-sm px-2 py-2 text-sm font-semibold transition-all duration-200 lg:w-full ${
+                    hasAccountChanges && !updateAccountLoading
+                      ? "bg-blue-500 text-white hover:bg-blue-800"
+                      : "cursor-not-allowed bg-gray-300 text-gray-500"
+                  }`}
                 >
                   {updateAccountLoading ? (
                     <AiOutlineLoading3Quarters className="mx-auto animate-spin" />
@@ -308,11 +384,17 @@ const FacultySettings = () => {
               id="newPassword"
               className="mt-3 w-full rounded-sm border-b border-gray-400 px-3 py-3 text-sm font-semibold text-gray-800 focus:ring-gray-700"
             />
-            {password.newPassword !== password.confirmPassword && (
+            {password.newPassword && password.newPassword.length < 8 && (
               <p className="text-sm text-red-500">
-                Confirm password does not match.
+                New password must be at least 8 characters.
               </p>
             )}
+            {password.newPassword !== password.confirmPassword &&
+              password.confirmPassword && (
+                <p className="text-sm text-red-500">
+                  Confirm password does not match.
+                </p>
+              )}
             <label
               htmlFor="confirmPassword"
               className="mt-5 block font-semibold text-gray-900"
@@ -334,9 +416,13 @@ const FacultySettings = () => {
             />
             <Button
               type="button"
-              isDisabled={updatePasswordLoading}
+              isDisabled={updatePasswordLoading || !hasPasswordChanges}
               onClick={handleSubmit}
-              className="mt-5 w-full rounded-sm bg-blue-500 px-2 py-2 text-sm font-semibold text-white hover:bg-blue-600 disabled:cursor-not-allowed lg:mt-5"
+              className={`mt-5 w-full rounded-sm px-2 py-2 text-sm font-semibold transition-all duration-200 lg:mt-5 ${
+                hasPasswordChanges && !updatePasswordLoading
+                  ? "bg-blue-500 text-white hover:bg-blue-600"
+                  : "cursor-not-allowed bg-gray-300 text-gray-500"
+              }`}
             >
               {updatePasswordLoading ? (
                 <AiOutlineLoading3Quarters className="mx-auto animate-spin" />

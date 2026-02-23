@@ -9,6 +9,7 @@ import {
   UnitOptions,
 } from "../../../constant/UserDropOptionsData";
 import { useNavigate } from "react-router-dom";
+import { useToast } from "../../../hooks/useToast";
 import { User } from "../../shared/types/types";
 
 // --- THE ULTIMATE IMAGE HELPER ---
@@ -55,6 +56,7 @@ const initialData = {
 
 export default function ProfileSettings() {
   const navigate = useNavigate();
+  const toast = useToast();
   const { user, setUser } = useAuthContextProvider();
 
   const [profilePic, setProfilePic] = useState<string | undefined>(undefined);
@@ -90,14 +92,14 @@ export default function ProfileSettings() {
   // --- SMART BUTTON LOGIC ---
   // Compares the current form data to the original user data
   const hasChanges = user ? (
-    formData.fname !== (user.fname || "") ||
-    formData.lname !== (user.lname || "") ||
-    formData.mi !== (user.mi || "") ||
-    formData.suffix !== (user.suffix || "") ||
-    formData.email !== (user.email || "") ||
-    formData.academic_rank !== (user.academic_rank || "") ||
-    formData.unit !== (user.unit || "") ||
-    formData.college !== (user.college || "") ||
+    (formData.fname ?? "") !== (user.fname ?? "") ||
+    (formData.lname ?? "") !== (user.lname ?? "") ||
+    (formData.mi ?? "") !== (user.mi ?? "") ||
+    (formData.suffix ?? "") !== (user.suffix ?? "") ||
+    (formData.email ?? "") !== (user.email ?? "") ||
+    (formData.academic_rank ?? "") !== (user.academic_rank ?? "") ||
+    (formData.unit ?? "") !== (user.unit ?? "") ||
+    (formData.college ?? "") !== (user.college ?? "") ||
     profilePic !== undefined // True if a new image was selected
   ) : false;
   // --------------------------
@@ -181,40 +183,56 @@ export default function ProfileSettings() {
       setUser(updatedUser);
       sessionStorage.setItem("User", JSON.stringify(updatedUser));
 
+      setFormData({
+        fname: updatedUser.fname || "",
+        lname: updatedUser.lname || "",
+        mi: updatedUser.mi || "",
+        email: updatedUser.email || "",
+        image_path: updatedUser.image_path || "",
+        academic_rank: updatedUser.academic_rank || "",
+        unit: updatedUser.unit || "",
+        suffix: updatedUser.suffix || "",
+        id: updatedUser.id || 0,
+        college: updatedUser.college || "",
+        created_at: updatedUser.created_at || null,
+        deleted_at: updatedUser.deleted_at || null,
+        updated_at: updatedUser.updated_at || null,
+        roles: updatedUser.roles || [{ name: "" }],
+      });
       setProfilePic(undefined);
 
-      alert("Profile updated successfully!");
+      toast.success("Successfully updated.");
 
       navigate("/admin-settings/profile");
 
     } catch (error: any) {
       console.error("Profile Update Error:", error);
 
-      // --- DETAILED ERROR EXTRACTOR ---
       if (error.response?.data?.errors) {
-          const errorMessages = Object.values(error.response.data.errors).flat().join('\n');
-          alert(`Validation Failed:\n${errorMessages}`);
+        const errorMessages = Object.values(error.response.data.errors).flat().join(" ");
+        toast.error(`Validation Failed: ${errorMessages}`);
       } else if (error.response?.data?.message) {
-          alert(`Error: ${error.response.data.message}`);
+        toast.error(error.response.data.message);
       } else {
-          alert("Failed to update profile due to a server error.");
+        toast.error("Failed to update profile due to a server error.");
       }
     }
   };
 
   return (
-    <section>
+    <section className="flex justify-center">
       <form
         onSubmit={handleSubmit}
-        className="space-y-10 rounded-md bg-white p-10 shadow-custom"
+        className="w-full max-w-xl space-y-10 rounded-md bg-white p-10 shadow-custom"
       >
         <h1 className="text-2xl font-bold text-gray-700">Profile Details</h1>
 
-        <div className="relative h-24 w-24 cursor-pointer">
-          <div
-            onClick={() => imgInput.current?.click()}
-            className="over relative h-full w-full overflow-hidden rounded-full border-2 border-gray-400 bg-white"
-          >
+        <div className="flex justify-center">
+          <div className="relative h-40 w-40 cursor-pointer">
+            <div
+              onClick={() => imgInput.current?.click()}
+              className="over relative h-full w-full overflow-hidden rounded-full border-2 border-gray-400 bg-white"
+            >
             <img
               key={profilePic || formData.image_path}
               src={profilePic || getImageUrl(formData.image_path)}
@@ -235,10 +253,11 @@ export default function ProfileSettings() {
           </div>
           <div
             onClick={() => imgInput.current?.click()}
-            className="absolute bottom-0 right-0 grid h-8 w-8 translate-x-1 place-content-center rounded-full border border-gray-400 bg-[#e2e5e9]"
+            className="absolute bottom-0 right-0 grid h-10 w-10 translate-x-1 place-content-center rounded-full border border-gray-400 bg-[#e2e5e9]"
           >
             <FaCamera />
           </div>
+        </div>
         </div>
 
         <div>

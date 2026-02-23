@@ -75,13 +75,11 @@ class UserController extends Controller
 
         // Only process the image if a new image_path was actually sent in the request
         if ($request->has('image_path') && !empty($request->image_path)) {
-
             $filePath = Str::after($request->image_path, config('myconfig.app_url').'/storage/');
 
             if ($filePath && Storage::disk('public')->exists($filePath)) {
                 // Check if the uploaded image is different from the current one
                 if (!Str::contains($request->image_path, $user->getRawOriginal('image_path'))) {
-
                     // It's a new image, so move it to the final storage folder
                     $updatedImage = $this->moveToStorage($request->image_path);
 

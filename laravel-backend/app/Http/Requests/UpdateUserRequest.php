@@ -45,4 +45,24 @@ class UpdateUserRequest extends FormRequest
             "email" => ['required', 'string', 'unique:users,email,' . $idToIgnore],
         ];
     }
+
+    /**
+     * Get custom attributes for validator errors.
+     */
+    public function attributes(): array
+    {
+        return [
+            'mi' => 'MI',
+        ];
+    }
+
+    /**
+     * Get custom messages for validator errors.
+     */
+    public function messages(): array
+    {
+        return [
+            'mi.max' => 'The MI field must not be greater than 1 character.',
+        ];
+    }
 }

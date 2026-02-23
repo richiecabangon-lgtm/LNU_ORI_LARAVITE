@@ -3,6 +3,7 @@ import api from "../api/axios";
 import axios from "axios";
 import { AiOutlineLoading3Quarters } from "react-icons/ai";
 import Button from "../shared/components/Button";
+import { useToast } from "../../hooks/useToast";
 
 type PasswordCredentials = {
   current_password: string;
@@ -11,6 +12,7 @@ type PasswordCredentials = {
 };
 
 const CoordinatorPassword = ({ userId }: { userId: number }) => {
+  const toast = useToast();
   const {
     register,
     watch,
@@ -26,32 +28,44 @@ const CoordinatorPassword = ({ userId }: { userId: number }) => {
     },
   });
   const newPassword = watch("password");
+  const currentPassword = watch("current_password");
+  const confirmPassword = watch("password_confirmation");
+
+  const hasChanges =
+    (currentPassword?.trim()?.length ?? 0) > 0 ||
+    (newPassword?.trim()?.length ?? 0) > 0 ||
+    (confirmPassword?.trim()?.length ?? 0) > 0;
 
   const handlePasswordChange = async (password: PasswordCredentials) => {
     try {
       await api.post("/api/password-reset/" + userId, password);
+      toast.success("Password updated successfully.");
       reset();
     } catch (e) {
-      if (axios.isAxiosError(e)) {
-        Object.keys(e.response?.data.errors).forEach((field) => {
+      if (axios.isAxiosError(e) && e.response?.data?.errors) {
+        Object.keys(e.response.data.errors).forEach((field) => {
           setError(field as keyof PasswordCredentials, {
             type: "server",
             message: e.response?.data.errors[field][0],
           });
         });
+        const firstError = Object.values(e.response.data.errors).flat()[0];
+        toast.error(typeof firstError === "string" ? firstError : "Failed to update password.");
+      } else {
+        toast.error("Failed to update password. Please try again.");
       }
     }
   };
   return (
     <form
       onSubmit={handleSubmit(handlePasswordChange)}
-      className="flex-1 self-start bg-white px-5 py-5"
+      className="w-full px-6 py-6 sm:px-9 sm:py-6 lg:px-5 lg:py-5"
     >
       <h2 className="text-xl font-semibold">Password</h2>
       <p className="mt-2 text-sm text-gray-500">Change your password</p>
       <label
         htmlFor="password"
-        className="mt-16 block font-semibold text-gray-900"
+        className="mt-6 block font-semibold text-gray-900 sm:mt-8 lg:mt-16"
       >
         Current Password
       </label>
@@ -112,7 +126,7 @@ const CoordinatorPassword = ({ userId }: { userId: number }) => {
           })}
           type="password"
           id="confirmPassword"
-          className="mt-3 w-full rounded-sm border-b border-green-500 px-3 py-3 text-sm font-semibold text-gray-800 focus:ring-gray-700"
+          className={`mt-3 w-full rounded-sm border-b px-3 py-3 text-sm font-semibold text-gray-800 focus:ring-gray-700 ${confirmPassword && newPassword !== confirmPassword ? "border-red-500" : confirmPassword && newPassword === confirmPassword ? "border-green-500" : "border-gray-400"}`}
         />
         {errors.password_confirmation && (
           <span className="block text-sm text-red-500">
@@ -122,8 +136,12 @@ const CoordinatorPassword = ({ userId }: { userId: number }) => {
       </div>
       <Button
         type="submit"
-        isDisabled={isSubmitting}
-        className="mt-5 w-full rounded-sm bg-blue-500 px-2 py-2 text-sm font-semibold text-white"
+        isDisabled={isSubmitting || !hasChanges}
+        className={`mt-5 w-full rounded-sm px-2 py-2 text-sm font-semibold transition-all duration-200 ${
+          hasChanges && !isSubmitting
+            ? "bg-blue-500 text-white hover:bg-blue-600"
+            : "cursor-not-allowed bg-gray-300 text-gray-500"
+        }`}
       >
         {isSubmitting ? (
           <AiOutlineLoading3Quarters className="animate-spin" />

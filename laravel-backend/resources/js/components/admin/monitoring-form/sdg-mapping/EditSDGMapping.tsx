@@ -1,7 +1,8 @@
 import { useEffect, useState } from "react";
 import axios from "../../../api/axios";
-import { imagePlaceholder } from "../../../../assets/images"; 
+import { imagePlaceholder } from "../../../../assets/images";
 import { useNavigate, useParams } from "react-router-dom";
+import { useToast } from "../../../../hooks/useToast";
 
 type EventType = React.ChangeEvent<HTMLInputElement>;
 
@@ -15,46 +16,56 @@ interface SDGType {
 const getImageUrl = (path: string | null | undefined) => {
   if (!path) return imagePlaceholder;
   if (path.startsWith("http://localhost/storage")) {
-      return path.replace("http://localhost/", "http://localhost:8000/");
+    return path.replace("http://localhost/", "http://localhost:8000/");
   }
-  if (path.startsWith("http")) return path; 
-  return `http://localhost:8000/storage/${path}`; 
+  if (path.startsWith("http")) return path;
+  return `http://localhost:8000/storage/${path}`;
 };
 // -------------------------------------------------------------
 
 export default function EditSDGMapping() {
-  const { id } = useParams(); 
+  const { id } = useParams();
   const navigate = useNavigate();
-  
+  const toast = useToast();
+
+  const [initialSDG, setInitialSDG] = useState<SDGType | null>(null);
   const [SDG, setSDG] = useState<SDGType>({
     name: "",
     description: "",
     image_path: "",
   });
-  
-  const [selectedImage, setSelectedImage] = useState<string | undefined>(imagePlaceholder);
+
+  const [selectedImage, setSelectedImage] = useState<string | undefined>(
+    imagePlaceholder,
+  );
   const [loading, setLoading] = useState(true);
+
+  const hasChanges =
+    initialSDG &&
+    (SDG.name !== initialSDG.name ||
+      SDG.description !== initialSDG.description ||
+      SDG.image_path !== initialSDG.image_path);
 
   // 1. Fetch Existing Data on Load
   useEffect(() => {
     const fetchSDG = async () => {
       try {
         const response = await axios.get(`/api/sdgmapping/${id}`);
-        // Handle nested data structure if necessary (response.data.data or response.data)
-        const data = response.data.data || response.data; 
+        const data = response.data.data || response.data;
 
-        setSDG({
-            name: data.name,
-            description: data.description,
-            image_path: data.image_path
-        });
+        const payload = {
+          name: data.name,
+          description: data.description,
+          image_path: data.image_path,
+        };
 
-        // Set the initial image preview using the helper
+        setInitialSDG(payload);
+        setSDG(payload);
         setSelectedImage(getImageUrl(data.image_path));
         setLoading(false);
       } catch (error) {
         console.error("Failed to fetch SDG details:", error);
-        alert("Could not load SDG details.");
+        toast.error("Could not load SDG details.");
         navigate("/admin-settings/sdg-mapping");
       }
     };
@@ -89,21 +100,20 @@ export default function EditSDGMapping() {
       setSDG((prevData) => ({ ...prevData, image_path: imagePath }));
     } catch (error) {
       console.error("File upload failed: ", error);
-      alert("Failed to upload image");
+      toast.error("Failed to upload image");
     }
   };
 
   const handleSubmit = async (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();
     try {
-      // 2. Send PUT request to update
       await axios.put(`/api/sdgmapping/${id}`, SDG);
-      
-      alert("SDG Updated Successfully!");
+      toast.success("SDG updated successfully.");
+      setInitialSDG({ ...SDG });
       navigate("/admin-settings/sdg-mapping");
     } catch (error) {
       console.error("Failed to update SDG: ", error);
-      alert("Failed to update SDG. Please try again.");
+      toast.error("Failed to update SDG. Please try again.");
     }
   };
 
@@ -160,7 +170,8 @@ export default function EditSDGMapping() {
 
       <button
         type="submit"
-        className="rounded-md bg-green-700 p-2 text-white hover:bg-green-600 mt-4"
+        disabled={!hasChanges}
+        className="mt-4 rounded-md bg-green-700 p-2 text-white hover:bg-green-600 disabled:cursor-not-allowed disabled:opacity-50"
       >
         Update SDG
       </button>

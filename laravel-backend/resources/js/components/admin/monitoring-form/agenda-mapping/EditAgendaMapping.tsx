@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import axios from "../../../api/axios";
 import { imagePlaceholder } from "../../../../assets/images";
 import { useNavigate, useParams } from "react-router-dom";
+import { useToast } from "../../../../hooks/useToast";
 
 type EventType = React.ChangeEvent<HTMLInputElement>;
 
@@ -14,7 +15,7 @@ interface AgendaType {
 const getImageUrl = (path: string | null | undefined) => {
   if (!path) return imagePlaceholder;
   if (path.startsWith("http://localhost/storage")) {
-      return path.replace("http://localhost/", "http://localhost:8000/");
+    return path.replace("http://localhost/", "http://localhost:8000/");
   }
   if (path.startsWith("http")) return path;
   return `http://localhost:8000/storage/${path}`;
@@ -24,14 +25,23 @@ const getImageUrl = (path: string | null | undefined) => {
 export default function EditAgendaMapping() {
   const { id } = useParams();
   const navigate = useNavigate();
+  const toast = useToast();
 
+  const [initialAgenda, setInitialAgenda] = useState<AgendaType | null>(null);
   const [agenda, setAgenda] = useState<AgendaType>({
     name: "",
     image_path: "",
   });
 
-  const [selectedImage, setSelectedImage] = useState<string | undefined>(imagePlaceholder);
+  const [selectedImage, setSelectedImage] = useState<string | undefined>(
+    imagePlaceholder,
+  );
   const [loading, setLoading] = useState(true);
+
+  const hasChanges =
+    initialAgenda &&
+    (agenda.name !== initialAgenda.name ||
+      agenda.image_path !== initialAgenda.image_path);
 
   // 1. Fetch Existing Data
   useEffect(() => {
@@ -40,16 +50,18 @@ export default function EditAgendaMapping() {
         const response = await axios.get(`/api/agendamapping/${id}`);
         const data = response.data.data || response.data;
 
-        setAgenda({
-            name: data.name,
-            image_path: data.image_path
-        });
+        const payload = {
+          name: data.name,
+          image_path: data.image_path,
+        };
 
+        setInitialAgenda(payload);
+        setAgenda(payload);
         setSelectedImage(getImageUrl(data.image_path));
         setLoading(false);
       } catch (error) {
         console.error("Failed to fetch Agenda details:", error);
-        alert("Could not load Agenda details.");
+        toast.error("Could not load Agenda details.");
         navigate("/admin-settings/agenda-mapping");
       }
     };
@@ -80,7 +92,7 @@ export default function EditAgendaMapping() {
       setAgenda((prev) => ({ ...prev, image_path: imagePath }));
     } catch (error) {
       console.error("File upload failed: ", error);
-      alert("Failed to upload image");
+      toast.error("Failed to upload image");
     }
   };
 
@@ -88,11 +100,12 @@ export default function EditAgendaMapping() {
     e.preventDefault();
     try {
       await axios.put(`/api/agendamapping/${id}`, agenda);
-      alert("Agenda Updated Successfully!");
+      toast.success("Agenda updated successfully.");
+      setInitialAgenda({ ...agenda });
       navigate("/admin-settings/agenda-mapping");
     } catch (error) {
       console.error("Failed to update Agenda: ", error);
-      alert("Failed to update Agenda.");
+      toast.error("Failed to update Agenda. Please try again.");
     }
   };
 
@@ -138,7 +151,8 @@ export default function EditAgendaMapping() {
 
       <button
         type="submit"
-        className="rounded-md bg-green-700 p-2 text-white hover:bg-green-600 mt-4"
+        disabled={!hasChanges}
+        className="mt-4 rounded-md bg-green-700 p-2 text-white hover:bg-green-600 disabled:cursor-not-allowed disabled:opacity-50"
       >
         Update Agenda
       </button>

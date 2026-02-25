@@ -5,6 +5,7 @@ import api from "../components/api/axios";
 import { UserAdminType, UserType } from "../components/admin/types";
 import { useNavigate } from "react-router-dom";
 import { User } from "../components/shared/types/types";
+import { toast } from "react-toastify";
 
 export function useAuthContextProvider() {
   const context = useContext(AuthContext);
@@ -71,6 +72,7 @@ export function useDeleteUser() {
       // Invalidate users so it's refetched
       queryClient.invalidateQueries(["users"]);
       queryClient.invalidateQueries(["adminDashboard"]);
+      toast.success("User deleted successfully");
 
       // Optional redirect
       navigate("/manage-faculty", { replace: true });

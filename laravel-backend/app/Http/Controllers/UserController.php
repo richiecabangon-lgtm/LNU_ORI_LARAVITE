@@ -179,7 +179,7 @@ class UserController extends Controller
             Storage::disk('public')->delete($user->image_path);
         }
 
-        $user->delete();
+        $user->forceDelete();
         return $this->success('','Faculty deleted successfully');
     }
 }

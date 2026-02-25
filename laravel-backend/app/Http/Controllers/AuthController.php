@@ -58,6 +58,10 @@ class AuthController extends Controller
             'academic_rank' => 'required|string',
             'image_path' => 'nullable|string' // Assuming they upload the image via your public upload endpoint first
         ]);
+        $imagePath = null;
+        if ($request->has('image_path') && $request->image_path) {
+            $imagePath = $this->moveToStorage($request->image_path);
+        }
 
         $user = User::create([
             'fname' => $request->fname,
@@ -68,7 +72,7 @@ class AuthController extends Controller
             'unit' => $request->unit,
             'academic_rank' => $request->academic_rank,
             'email' => $request->email,
-            'image_path' => $request->image_path,
+            'image_path' => $imagePath,
             'password' => Hash::make($request->password),
         ]);
         $user->assignRole(RoleEnum::FACULTY);

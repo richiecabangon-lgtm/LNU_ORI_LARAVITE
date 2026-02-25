@@ -63,9 +63,8 @@ export default function useAddUsers(
   };
 
   const onSubmit: SubmitHandler<Omit<User, "id">> = async (data) => {
-    const form = { ...data, image_path: imagePath };
+    const form = { ...data, image_path: imagePath || data.image_path };
     userMutation.mutate(form);
-
     queryClient.invalidateQueries({ queryKey: ["users"] });
   };
 

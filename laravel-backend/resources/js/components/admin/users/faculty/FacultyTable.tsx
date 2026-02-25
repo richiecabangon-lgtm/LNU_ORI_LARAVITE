@@ -255,8 +255,10 @@ const FacultyTable: React.FC<FacultyTableProps> = ({
         message="Are you sure you want to delete user?"
         onCancel={() => setOpenDeleteModal(false)}
         onConfirm={() => {
+          setOpenDeleteModal(false);
           handleDelete(selectedUserId as number);
           filter(selectedUserId as number);
+          setSelectedUserId(null);
         }}
         type="submit"
       />

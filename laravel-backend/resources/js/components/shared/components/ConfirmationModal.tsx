@@ -23,11 +23,10 @@ const ConfirmationModal = ({
   confirmLabel,
   cancelLabel,
 }: ConfirmationModalType) => {
-  if (!isOpen) return null;
-
   const modalRef = useRef<HTMLDivElement | null>(null);
 
   useEffect(() => {
+    if (!isOpen) return;
     const activeElement = document.activeElement;
     const previousOverflow = document.body.style.overflow;
     if (activeElement instanceof HTMLElement) {
@@ -39,7 +38,9 @@ const ConfirmationModal = ({
     return () => {
       document.body.style.overflow = previousOverflow;
     };
-  }, []);
+  }, [isOpen]);
+
+  if (!isOpen) return null;
 
   const confirmText =
     confirmLabel ?? (type === "submit" ? "Confirm" : "Leave Page");

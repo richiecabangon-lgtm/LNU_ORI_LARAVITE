@@ -51,6 +51,7 @@ import FPESPreview from "./components/admin/reports/FPESPreview";
 import ArchivedResearch from "./components/admin/monitoring-form/ArchivedResearch";
 import ArchivedSubmissions from "./components/faculty/submit-monitoring-form/ArchivedSubmissions";
 import Backup from "./components/admin/settings/Backup";
+import Register from "./pages/Register";
 
 const router = createBrowserRouter([
   // =================================
@@ -78,6 +79,10 @@ const router = createBrowserRouter([
             element: <Login />,
           },
         ],
+      },
+      {
+        path: "/register",
+        element: <Register />,
       },
     ],
   },
@@ -126,6 +131,7 @@ const router = createBrowserRouter([
         path: "/faculty/:id/edit",
         element: <FacultyDetails />,
       },
+
 
       // Monitoring Form
       {
@@ -225,6 +231,7 @@ const router = createBrowserRouter([
             path: "backup",
             element: <Backup />,
           },
+
         ],
       },
     ],

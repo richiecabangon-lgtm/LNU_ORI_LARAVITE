@@ -1,4 +1,4 @@
-import { useNavigate } from "react-router-dom";
+import { Link, useNavigate } from "react-router-dom";
 import { useAuthContextProvider } from "../hooks/hooks";
 import { InputPassword } from "../components/ui/InputPassword";
 
@@ -73,6 +73,12 @@ export default function Login() {
               </button>
             )}
           </div>
+          <div className="mt-4 text-center text-sm text-gray-600">
+                Don't have an account?{" "}
+                <Link to="/register" className="font-bold text-blue-700 hover:underline">
+                    Register as Faculty
+                </Link>
+            </div>
         </form>
       </div>
     </div>

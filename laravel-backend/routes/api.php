@@ -63,6 +63,7 @@ Route::middleware(['auth:sanctum'])->get('/user', function (Request $request) {
 
 Route::post('/login', [AuthController::class, 'login']);
 Route::post('/register', [AuthController::class, 'register']);
+Route::post('/send-otp', [AuthController::class, 'sendOtp']);
 
 // Public routes for registration page (no auth required)
 Route::get('/public/colleges', [CollegeController::class, 'index']);

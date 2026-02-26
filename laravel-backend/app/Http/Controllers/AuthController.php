@@ -11,6 +11,9 @@ use App\Traits\HttpResponses;
 use Error;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
+use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Mail;
+use Carbon\Carbon;
 
 class AuthController extends Controller
 {
@@ -44,6 +47,45 @@ class AuthController extends Controller
       return $this->success('', 'Logged out successfully');
     }
 
+    /**
+     * Send OTP to the user's email for verification before registration.
+     */
+    public function sendOtp(Request $request)
+    {
+        $request->validate([
+            'email' => 'required|string|email|max:255|unique:users,email',
+        ]);
+
+        // Generate 6-digit OTP
+        $otp = rand(100000, 999999);
+
+        // Delete any existing OTP for this email
+        DB::table('otp_codes')->where('email', $request->email)->delete();
+
+        // Store new OTP with 10-minute expiry
+        DB::table('otp_codes')->insert([
+            'email' => $request->email,
+            'otp' => $otp,
+            'expires_at' => Carbon::now()->addMinutes(10),
+            'created_at' => now(),
+            'updated_at' => now(),
+        ]);
+
+        // Send OTP via email
+        Mail::raw("Your OTP verification code is: {$otp}\n\nThis code will expire in 10 minutes.", function ($message) use ($request) {
+            $message->to($request->email)
+                    ->subject('LNU ORI - Email Verification Code');
+        });
+
+        return response()->json([
+            'status' => 'success',
+            'message' => 'OTP has been sent to your email.',
+        ]);
+    }
+
+    /**
+     * Register a new user after verifying the OTP.
+     */
     public function register(Request $request)
     {
         $request->validate([
@@ -56,8 +98,24 @@ class AuthController extends Controller
             'college' => 'required|string',
             'unit' => 'required|string',
             'academic_rank' => 'required|string',
-            'image_path' => 'nullable|string' // Assuming they upload the image via your public upload endpoint first
+            'image_path' => 'nullable|string',
+            'otp' => 'required|string',
         ]);
+
+        // Verify OTP
+        $otpRecord = DB::table('otp_codes')
+            ->where('email', $request->email)
+            ->where('otp', $request->otp)
+            ->where('expires_at', '>', Carbon::now())
+            ->first();
+
+        if (!$otpRecord) {
+            return response()->json([
+                'status' => 'error',
+                'message' => 'Invalid or expired OTP. Please request a new one.',
+            ], 422);
+        }
+
         $imagePath = null;
         if ($request->has('image_path') && $request->image_path) {
             $imagePath = $this->moveToStorage($request->image_path);
@@ -76,6 +134,10 @@ class AuthController extends Controller
             'password' => Hash::make($request->password),
         ]);
         $user->assignRole(RoleEnum::FACULTY);
+
+        // Clean up the OTP record
+        DB::table('otp_codes')->where('email', $request->email)->delete();
+
         return response()->json([
             'status' => 'Request was successfull',
             'message' => 'Registration successful! You can now log in.',

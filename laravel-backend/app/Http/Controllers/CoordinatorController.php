@@ -26,9 +26,7 @@ class CoordinatorController extends Controller
 
         $coordinators = User::query()
                         ->select(['id', 'email', 'academic_rank', 'unit', 'college', 'fname', 'lname', 'mi', 'suffix'])
-                        ->whereDoesntHave('roles', function ($q) {
-                            $q->where('name', '!=', RoleEnum::RESEARCH_COORDINATOR);
-                        })
+                        ->role(RoleEnum::RESEARCH_COORDINATOR)
                         ->latest()
                         ->get();
 

@@ -12,7 +12,7 @@ const Logout = ({ style }: { style: string }) => {
   const [isLoading, setIsLoading] = useState(false);
   const [openModal, setOpenModal] = useState(false);
   const navigate = useNavigate();
-  const { setUser } = useAuthContextProvider();
+  const { setUser, setActiveRole } = useAuthContextProvider();
 
   const handleLogout = async () => {
     setIsLoading(true);
@@ -20,6 +20,7 @@ const Logout = ({ style }: { style: string }) => {
       await api.post("/api/logout");
       toast.success("Successfully logged out.");
       setUser(null);
+      setActiveRole(null);
       navigate("/login");
     } catch (error) {
       console.error("Logout failed:", error);

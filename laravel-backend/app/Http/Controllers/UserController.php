@@ -107,43 +107,20 @@ class UserController extends Controller
         return $this->success($user, 'Faculty Updated Successfully');
     }
 
-    public function assignCoordinatorRole(User $user, Request $request)
+    public function assignCoordinatorRole(User $user)
     {
-        $request->validate([
-            'email' => 'email|required|unique:users',
-            'password' => 'string|required'
-        ]);
+        $user->assignRole(RoleEnum::RESEARCH_COORDINATOR);
+        $user->load('roles:id,name');
 
-        $attributes = Arr::except($user, ['created_at', 'updated_at']);
-
-        $attributes['email'] = $request->email;
-
-        $user->syncRoles([RoleEnum::FACULTY,RoleEnum::RESEARCH_COORDINATOR]);
-
-        $coordinator = User::create($attributes->toArray() + ['password' => Hash::make($request->password)]);
-
-        $coordinator->assignRole(RoleEnum::RESEARCH_COORDINATOR);
-
-        $coordinator->load('roles');
-
-        return $this->success(['user'=>$user, 'coordinator' => $coordinator]);
+        return $this->success($user, 'Coordinator role assigned successfully');
     }
 
     public function revokeCoordinatorRole(User $user)
     {
-        $user->syncRoles([RoleEnum::FACULTY]);
+        $user->removeRole(RoleEnum::RESEARCH_COORDINATOR);
+        $user->load('roles:id,name');
 
-        $coordinator = User::where([
-            ['fname','=', $user->fname],
-            ['lname','=', $user->lname]
-            ])->whereHas('roles', function($q){
-                $q->where('name', RoleEnum::RESEARCH_COORDINATOR);
-            })->first();
-
-        $coordinator->removeRole(RoleEnum::RESEARCH_COORDINATOR);
-        $coordinator->load('roles:id,name');
-
-        return $this->success($coordinator);
+        return $this->success($user, 'Coordinator role removed successfully');
     }
 
     public function store(AddFacultyRequest $req)

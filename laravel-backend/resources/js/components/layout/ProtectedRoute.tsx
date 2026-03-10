@@ -14,11 +14,9 @@ const ProtectedRoute = ({
   allowedRole,
   redirectPath = "/404",
 }: ProtectedRouteProps) => {
-  // 1. Get the auth loading state and user from context
   const { user, authLoading } = useAuthContextProvider();
 
-  // 2. THE FIX: If the app is still loading (checking if you are logged in),
-  // show a spinner. Do NOT redirect yet.
+  // 1. Show spinner while checking auth status
   if (authLoading) {
     return (
       <div className="flex h-screen w-full items-center justify-center">
@@ -27,17 +25,20 @@ const ProtectedRoute = ({
     );
   }
 
-  // 3. Only redirect to Login if loading is finished and no user was found.
+  // 2. Redirect to landing if not logged in
   if (!user) {
     return <Navigate to="/" replace />;
   }
 
-  // 4. Role Check: If user exists but has the wrong role, go to 404/redirect path.
-  if (allowedRole && user.roles?.[0]?.name !== allowedRole) {
-    return <Navigate to={redirectPath} replace />;
+  // 3. Check if user HAS the required role (not just activeRole)
+  if (allowedRole) {
+    const userHasRole = user.roles?.some((role) => role.name === allowedRole);
+    if (!userHasRole) {
+      return <Navigate to={redirectPath} replace />;
+    }
   }
 
-  // 5. If all checks pass, show the page.
+  // 4. All checks pass
   return children;
 };
 

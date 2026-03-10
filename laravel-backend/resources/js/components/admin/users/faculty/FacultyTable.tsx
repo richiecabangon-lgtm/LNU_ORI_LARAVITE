@@ -10,7 +10,6 @@ import { UserDataTable } from "../../types";
 import api from "../../../api/axios";
 import AddCoordinatorModal from "./AddCoordinatorModal";
 import ConfirmationModal from "../../../shared/components/ConfirmationModal";
-import axios from "axios";
 import { useDeleteUser } from "../../../../hooks/hooks";
 
 type FacultyTableProps = {
@@ -29,10 +28,7 @@ const FacultyTable: React.FC<FacultyTableProps> = ({
   const [openConfirmationModal, setOpenConfirmationModal] = useState(false);
   const [openDeleteModal, setOpenDeleteModal] = useState(false);
   const [selectedUserId, setSelectedUserId] = useState<number | null>(null);
-  const [email, setEmail] = useState("");
-  const [password, setPassword] = useState("");
   const [isLoading, setLoading] = useState(false);
-  const [error, setError] = useState({ email: "", password: "" });
 
   const { handleDelete } = useDeleteUser();
 
@@ -66,27 +62,15 @@ const FacultyTable: React.FC<FacultyTableProps> = ({
   const handleAssignCoordinator = async () => {
     if (!selectedUserId) return;
 
-    const formData = {
-      email: email,
-      password: password,
-    };
-
     setLoading(true);
-    setError({ email: "", password: "" });
 
     try {
-      await api.post(`/api/faculty/${selectedUserId}/update-role`, formData);
+      await api.post(`/api/faculty/${selectedUserId}/update-role`);
       setLoading(false);
       setOpenModal(false);
       setSelectedUserId(null);
       refetch();
     } catch (error) {
-      if (axios.isAxiosError(error)) {
-        setError({
-          email: error.response?.data.errors.email,
-          password: error.response?.data.errors.password,
-        });
-      }
       setLoading(false);
     }
   };
@@ -234,11 +218,6 @@ const FacultyTable: React.FC<FacultyTableProps> = ({
       <AddCoordinatorModal
         faculty={data && data.find((user) => user.id === selectedUserId)}
         loading={isLoading}
-        errors={error}
-        email={email}
-        setEmail={setEmail}
-        password={password}
-        setPassword={setPassword}
         isOpen={openModal}
         onCancel={() => handleCancelModal()}
         onConfirm={() => handleAssignCoordinator()}

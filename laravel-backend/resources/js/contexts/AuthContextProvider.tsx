@@ -19,11 +19,16 @@ type AuthContextType = {
   error: string | null;
   setError: React.Dispatch<React.SetStateAction<string | null>>;
   authLoading: boolean;
+  activeRole: string | null;
+  setActiveRole: React.Dispatch<React.SetStateAction<string | null>>;
+  pendingRoleSelection: boolean;
+  setPendingRoleSelection: React.Dispatch<React.SetStateAction<boolean>>;
 };
 
 export const AuthContext = createContext<AuthContextType | null>(null);
 
 const storageKey = "auth-user";
+const activeRoleKey = "active-role";
 
 const getStoredUser = () => {
   try {
@@ -47,6 +52,26 @@ const setStoredUser = (nextUser: User | null) => {
   }
 };
 
+const getStoredActiveRole = (): string | null => {
+  try {
+    return sessionStorage.getItem(activeRoleKey);
+  } catch {
+    return null;
+  }
+};
+
+const setStoredActiveRole = (role: string | null) => {
+  try {
+    if (!role) {
+      sessionStorage.removeItem(activeRoleKey);
+      return;
+    }
+    sessionStorage.setItem(activeRoleKey, role);
+  } catch (error) {
+    console.error(error);
+  }
+};
+
 export default function AuthContextProvider({
   children,
 }: {
@@ -57,6 +82,8 @@ export default function AuthContextProvider({
   const [password, setPassword] = useState("");
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [activeRole, setActiveRole] = useState<string | null>(() => getStoredActiveRole());
+  const [pendingRoleSelection, setPendingRoleSelection] = useState(false);
 
   const {
     data: userData,
@@ -76,6 +103,7 @@ export default function AuthContextProvider({
           userError.response?.status === 419)
       ) {
         setUser(null);
+        setActiveRole(null);
       }
       setInitialLoadCompleted(true);
     }
@@ -84,6 +112,10 @@ export default function AuthContextProvider({
   useEffect(() => {
     setStoredUser(user);
   }, [user]);
+
+  useEffect(() => {
+    setStoredActiveRole(activeRole);
+  }, [activeRole]);
 
   const handleLogin = async (navigate: NavigateFunction) => {
     setLoading(true);
@@ -96,12 +128,21 @@ export default function AuthContextProvider({
       });
 
       setUser(data.data);
-      const role = data.data.roles[0].name;
 
       if (status === 200) {
         setEmail("");
         setPassword("");
-        navigate(redirectLink[role]);
+
+        const roles = data.data.roles;
+
+        if (roles.length === 1) {
+          // Single role — go directly to dashboard
+          setActiveRole(roles[0].name);
+          navigate(redirectLink[roles[0].name]);
+        } else {
+          // Multiple roles — show role selection modal
+          setPendingRoleSelection(true);
+        }
       }
     } catch (error) {
       if (axios.isAxiosError(error)) {
@@ -129,6 +170,10 @@ export default function AuthContextProvider({
         error,
         setError,
         authLoading: isUserLoading && !user,
+        activeRole,
+        setActiveRole,
+        pendingRoleSelection,
+        setPendingRoleSelection,
       }}
     >
       {children}

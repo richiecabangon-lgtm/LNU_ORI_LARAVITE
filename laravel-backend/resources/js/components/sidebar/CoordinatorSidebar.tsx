@@ -6,6 +6,7 @@ import { useAuthContextProvider } from "../../hooks/hooks";
 import { motion, AnimatePresence } from "framer-motion";
 import { useState } from "react";
 import { LuFileCheck, LuFileClock } from "react-icons/lu";
+import RoleSwitcher from "../ui/RoleSwitcher";
 
 // react icon
 
@@ -111,6 +112,10 @@ const CoordinatorSidebar = () => {
               <FaCog className="mr-2" />
               <span>Settings</span>
             </NavLink>
+          </li>
+
+          <li>
+            <RoleSwitcher />
           </li>
 
           <li>

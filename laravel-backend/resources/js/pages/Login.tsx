@@ -1,6 +1,7 @@
 import { Link, useNavigate } from "react-router-dom";
 import { useAuthContextProvider } from "../hooks/hooks";
 import { InputPassword } from "../components/ui/InputPassword";
+import RoleSelectionModal from "../components/ui/RoleSelectionModal";
 
 export default function Login() {
   const {
@@ -11,6 +12,7 @@ export default function Login() {
     setPassword,
     loading,
     error,
+    pendingRoleSelection,
   } = useAuthContextProvider();
 
   const navigate = useNavigate();
@@ -81,6 +83,8 @@ export default function Login() {
             </div>
         </form>
       </div>
+
+      {pendingRoleSelection && <RoleSelectionModal />}
     </div>
   );
 }

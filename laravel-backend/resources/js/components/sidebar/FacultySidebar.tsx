@@ -2,6 +2,7 @@ import { NavLink } from "react-router-dom";
 import { FaArchive, FaClipboardList, FaCog } from "react-icons/fa";
 import { MdDashboard } from "react-icons/md";
 import Logout from "../util/Logout";
+import RoleSwitcher from "../ui/RoleSwitcher";
 
 // react icon
 
@@ -69,6 +70,10 @@ const FacultySidebar = () => {
               <FaCog className="mr-2" />
               <span>Settings</span>
             </NavLink>
+          </li>
+
+          <li>
+            <RoleSwitcher />
           </li>
 
           <li>

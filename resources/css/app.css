@@ -1,0 +1,106 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+    :root {
+        --ori-primary: #ffffff;
+        --ori-secondary: #1e4d8c;
+        --ori-accent: #f5c518;
+    }
+
+    body {
+        @apply bg-ori-blue-50 text-ori-blue-900 antialiased;
+    }
+}
+
+@layer components {
+    .ori-card {
+        @apply rounded-2xl border border-ori-blue-100 bg-white shadow-soft;
+    }
+
+    .ori-btn-primary {
+        @apply inline-flex items-center justify-center rounded-xl bg-ori-blue-600 px-4 py-2.5 text-sm font-semibold text-white transition hover:bg-ori-blue-700 focus:outline-none focus:ring-2 focus:ring-ori-yellow-400 focus:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-60;
+    }
+
+    .ori-btn-accent {
+        @apply inline-flex items-center justify-center rounded-xl bg-ori-yellow-400 px-4 py-2.5 text-sm font-semibold text-ori-blue-900 transition hover:bg-ori-yellow-300 focus:outline-none focus:ring-2 focus:ring-ori-blue-500 focus:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-60;
+    }
+
+    .ori-btn-ghost {
+        @apply inline-flex items-center justify-center rounded-xl border border-ori-blue-200 bg-white px-4 py-2.5 text-sm font-semibold text-ori-blue-700 transition hover:bg-ori-blue-50 focus:outline-none focus:ring-2 focus:ring-ori-blue-300 focus:ring-offset-2;
+    }
+
+    .ori-input {
+        @apply w-full rounded-xl border-ori-blue-200 bg-white text-ori-blue-900 shadow-sm focus:border-ori-blue-500 focus:ring-ori-yellow-400;
+    }
+
+    .ori-label {
+        @apply mb-1.5 block text-sm font-semibold text-ori-blue-800;
+    }
+
+    .ori-badge {
+        @apply inline-flex items-center rounded-full px-2.5 py-1 text-xs font-semibold;
+    }
+
+    input[type='file'] {
+        @apply block w-full cursor-pointer overflow-hidden rounded-xl border border-ori-blue-200 bg-white p-0 text-sm text-ori-blue-700 shadow-sm focus:outline-none focus-visible:ring-2 focus-visible:ring-ori-yellow-400;
+    }
+
+    input[type='file']::file-selector-button {
+        @apply mr-3 cursor-pointer border-0 border-r border-ori-blue-200 bg-ori-blue-50 py-2.5 pl-10 pr-4 text-sm font-semibold text-ori-blue-800 transition-colors;
+        background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' fill='none' viewBox='0 0 24 24' stroke-width='1.8' stroke='%231e4d8c'%3E%3Cpath stroke-linecap='round' stroke-linejoin='round' d='M3 16.5v2.25A2.25 2.25 0 005.25 21h13.5A2.25 2.25 0 0021 18.75V16.5m-13.5-9L12 3m0 0l4.5 4.5M12 3v13.5'/%3E%3C/svg%3E");
+        background-repeat: no-repeat;
+        background-position: 0.85rem center;
+        background-size: 1.1rem;
+    }
+
+    input[type='file']:hover::file-selector-button {
+        @apply bg-ori-blue-100;
+    }
+}
+
+.theme-dark {
+    color-scheme: dark;
+    background: #111827 !important;
+    color: #e5e7eb;
+}
+
+.theme-dark nav,
+.theme-dark .ori-card,
+.theme-dark .bg-white {
+    background-color: #1f2937 !important;
+    border-color: #374151 !important;
+}
+
+.theme-dark .text-ori-blue-900,
+.theme-dark .text-ori-blue-800,
+.theme-dark .text-ori-blue-700,
+.theme-dark .text-gray-900,
+.theme-dark .font-medium,
+.theme-dark .font-semibold {
+    color: #e5e7eb !important;
+}
+
+.theme-dark .text-ori-blue-600,
+.theme-dark .text-ori-blue-500,
+.theme-dark .text-ori-blue-400,
+.theme-dark .text-gray-600 {
+    color: #a7b4c6 !important;
+}
+
+.theme-dark input:not([type='checkbox']):not([type='radio']),
+.theme-dark select,
+.theme-dark textarea {
+    color-scheme: dark;
+    background-color: #111827;
+    border-color: #4b5563;
+    color: #f3f4f6;
+}
+
+.theme-dark .border-ori-blue-100,
+.theme-dark .border-ori-blue-200,
+.theme-dark .divide-ori-blue-100 > :not([hidden]) ~ :not([hidden]),
+.theme-dark .divide-ori-blue-50 > :not([hidden]) ~ :not([hidden]) {
+    border-color: #374151 !important;
+}

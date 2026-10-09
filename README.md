@@ -1,139 +1,81 @@
-A web-based platform for managing, monitoring, and evaluating faculty research production, utilizing AI for document verification and Scopus integration.
+# LNU ORI System
 
-🛠 Prerequisites
+Office of Research and Innovation System for **Leyte Normal University**.
 
-Before setting up the project, ensure you have the following installed:
+A scalable Laravel + Inertia + Vue platform that manages faculty research involvement through a clear RBAC workflow:
 
-PHP 8.1 or higher
+**Faculty → Coordinator evaluation → Admin approval**
 
-Composer
+## Stack
 
-Node.js (v18+) & npm
+- Laravel 13
+- Inertia.js + Vue 3 + TypeScript
+- Tailwind CSS (White / Blue / Yellow design system)
+- SQLite by default (switchable to MySQL for production)
 
-MySQL (via XAMPP, Laragon, or direct install)
+## Roles
 
-ImageMagick & Ghostscript (Required for PDF-to-Image thumbnail generation)
+| Role | Capabilities |
+|------|--------------|
+| **Faculty** | Create, revise, and submit research involvement records with evidence |
+| **Coordinator** | Evaluate submissions, score quality, recommend approval / rejection / revision |
+| **Admin** | Approve or reject evaluated submissions; manage users |
 
-🚀 Installation Steps
+## Architecture highlights
 
-1. Clone the Repository
+- Enum-driven statuses and roles for safe domain modeling
+- `ResearchWorkflowService` centralizes status transitions and audit history
+- Policies + role middleware for authorization
+- Soft deletes, UUID route keys, and status history for sustainable records
+- Organizational units (colleges, departments, academic years) for growth
 
-git clone <your-repo-url>
-cd ori_system
+## Workflow statuses
 
+`draft → submitted → under_evaluation → evaluated → approved | rejected`
 
-2. Backend Setup (Laravel)
+Revision path: coordinator may return a submission to `revision_requested`.
 
-cd laravel-backend
+## Quick start
+
+```bash
+cd LNU_ORI_LARAVITE
 composer install
-cp .env.example .env
+cp .env.example .env   # if needed
 php artisan key:generate
+php artisan migrate --seed
 php artisan storage:link
-
-
-3. Frontend Setup (React)
-
-cd ../react-frontend
 npm install
-
-
-⚙️ Environment Configuration (.env)
-
-Open laravel-backend/.env and configure the following:
-
-Database Settings
-
-Crucial: Use 127.0.0.1 instead of localhost to avoid socket errors during backups.
-
-DB_CONNECTION=mysql
-DB_HOST=127.0.0.1
-DB_PORT=3306
-DB_DATABASE=ori_system
-DB_USERNAME=root
-DB_PASSWORD=
-
-
-AI Integration (Gemini API)
-
-GEMINI_API_KEY=your_actual_gemini_api_key_here
-
-
-🔧 Special Requirements & Fixes
-
-1. Database Backup Fix (Windows)
-
-To enable the Backup feature on Windows, you must tell Laravel where mysqldump.exe is located.
-
-Open laravel-backend/config/database.php.
-
-In the mysql array, ensure the dump path is set correctly:
-
-'dump' => [
-    'dump_binary_path' => 'C:\xampp\mysql\bin', // or path to Laragon bin
-    'use_single_transaction',
-    'timeout' => 300,
-],
-
-
-2. Imagick (PDF Thumbnail) Fix
-
-If you encounter an error regarding Imagick, follow these steps:
-
-Install Ghostscript: Download and install from the official site.
-
-Install ImageMagick: Download the DLL version (e.g., ImageMagick-7.x-Q16-HDRI-x64-dll.exe).
-
-PHP Extension: Add extension=imagick to your php.ini.
-
-Environment Variables: Add the ImageMagick installation path to your Windows System PATH.
-
-3. Date Format Error (MySQL 1292)
-
-The system is pre-configured to handle ISO date strings from React. If modifying controllers, always use Carbon to format dates:
-
-$start_date = Carbon::parse($request->start_date)->format('Y-m-d');
-
-
-🏃 How to Run
-
-Start the Backend
-
-# In laravel-backend
-php artisan serve
-
-
-Start the Frontend
-
-# In react-frontend
 npm run dev
+```
 
+In another terminal:
 
-📁 Backup and Restore
+```bash
+php artisan serve
+```
 
-Backup: Log in as Admin -> Settings -> Backup -> Create Backup. This creates a .zip file containing the SQL dump and all uploaded files (profile pictures/certificates).
+Open `http://localhost:8000`.
 
-Restore: Upload the .zip file in the Backup settings to restore the system state exactly.
+## Demo accounts
 
-👥 Roles
+Password for all seeded users: `password`
 
-Admin: Manages users, sets academic years, archives research, and manages backups.
+| Role | Email |
+|------|-------|
+| Admin | admin@lnu.edu.ph |
+| Coordinator | coordinator@lnu.edu.ph |
+| Faculty | faculty@lnu.edu.ph |
 
-Faculty: Submits research monitoring forms and tracks points/evaluations.
+## Color palette
 
+- **Primary:** White (`#FFFFFF`)
+- **Secondary:** Blue (`#1E4D8C`)
+- **Accent:** Yellow (`#F5C518`)
 
+## Production notes
 
-Server Requirements for PDF Processing
-
-The Research Monitoring System requires ImageMagick and Ghostscript to render PDF thumbnails.
-
-For Ubuntu / Debian Servers (Recommended):
-The server administrator simply needs to run the following commands via SSH:
-
-Update packages:
-sudo apt-get update
-
-Install the required libraries and PHP extension:
-sudo apt-get install ghostscript imagemagick php-imagick
-
-Restart the web server (Apache or Nginx):
-sudo systemctl restart apache2 OR sudo systemctl restart php8.x-fpm
+1. Use MySQL/PostgreSQL instead of SQLite
+2. Set strong `APP_KEY`, disable debug, configure mail/queue
+3. Run `npm run build` and serve Vite assets
+4. Put file storage behind durable object storage if needed
+5. Keep role provisioning admin-only (public registration disabled)

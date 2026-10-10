@@ -140,8 +140,11 @@ const navItems = computed(() => {
                         <div class="flex shrink-0 items-center gap-3">
                             <Link :href="route('dashboard')" class="flex items-center gap-3">
                                 <div class="flex h-10 w-10 items-center justify-center rounded-xl bg-ori-blue-700 text-ori-yellow-400 shadow-soft">
-                                    <img v-if="user?.profile_photo_url" :src="user.profile_photo_url" :alt="`${user.name} profile photo`" class="h-10 w-10 rounded-xl object-cover" />
-                                    <ApplicationLogo v-else class="block h-6 w-auto fill-current" />
+                                    <img
+                                        src="/images/ori.ico"
+                                        alt="Leyte Normal University Office of Research and Innovation"
+                                        class="h-10 w-10 rounded-xl bg-navy p-1 object-contain"
+                                    />
                                 </div>
                                 <div class="hidden leading-tight sm:block">
                                     <div class="font-display text-sm font-semibold text-ori-blue-900">

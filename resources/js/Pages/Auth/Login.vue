@@ -31,9 +31,9 @@ const submit = () => {
         <Head title="Log in" />
 
         <div class="mb-6">
-            <h1 class="font-display text-2xl font-semibold text-ori-blue-900">Sign in</h1>
-            <p class="mt-1 text-sm text-ori-blue-600">
-                Access the ORI research involvement workflow.
+            <h1 class="font-display text-2xl font-semibold text-ori-blue-900 text-center">Sign in</h1>
+            <p class="mt-1 text-sm text-ori-blue-600 text-center">
+                Access the ORI research involvement system.
             </p>
         </div>
 
@@ -93,10 +93,10 @@ const submit = () => {
                 Enter ORI portal
             </button>
 
-            <div class="rounded-xl bg-ori-blue-50 p-3 text-xs text-ori-blue-700">
+            <!-- <div class="rounded-xl bg-ori-blue-50 p-3 text-xs text-ori-blue-700">
                 Demo accounts use password <strong>password</strong>:
                 faculty@lnu.edu.ph · coordinator@lnu.edu.ph · admin@lnu.edu.ph
-            </div>
+            </div> -->
         </form>
     </GuestLayout>
 </template>

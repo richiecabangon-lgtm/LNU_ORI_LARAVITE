@@ -125,7 +125,7 @@ const navItems = computed(() => {
 <template>
     <div class="app-shell min-h-screen bg-[radial-gradient(circle_at_top,_#fff9e6,_transparent_28%),linear-gradient(180deg,#ffffff_0%,#eaf1fb_100%)]" :class="{ 'theme-dark': isDark }">
         <nav class="relative z-50 border-b border-ori-blue-100 bg-white/90 backdrop-blur">
-            <div class="border-b border-ori-blue-50 bg-ori-blue-50/70">
+            <div class="border-b-2 border-b-ori-blue-50 border-t-2 border-t-yellow-400 bg-white/90">
                 <div class="mx-auto flex max-w-7xl items-center justify-end gap-3 px-4 py-1.5 text-xs text-ori-blue-600 sm:px-6 lg:px-8">
                     <time :datetime="currentTime.toISOString()" class="tabular-nums" aria-label="Current local date and time">
                         <span>{{ currentDateLabel }}</span>

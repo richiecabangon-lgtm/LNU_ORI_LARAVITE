@@ -28,22 +28,22 @@ class DatabaseSeeder extends Seeder
 
         $itDept = Department::query()->create([
             'college_id' => $cas->id,
-            'code' => 'IT',
-            'name' => 'Information Technology Department',
+            'code' => 'BSIT',
+            'name' => 'Bachelor of Science in Information Technology',
             'is_active' => true,
         ]);
 
         Department::query()->create([
             'college_id' => $cas->id,
-            'code' => 'MATH',
-            'name' => 'Mathematics Department',
+            'code' => 'BSED',
+            'name' => 'Bachelor of Science in Education',
             'is_active' => true,
         ]);
 
         Department::query()->create([
             'college_id' => $coe->id,
-            'code' => 'ELEM',
-            'name' => 'Elementary Education Department',
+            'code' => 'BEED',
+            'name' => 'Bachelor of Elementary Education',
             'is_active' => true,
         ]);
 
@@ -64,7 +64,7 @@ class DatabaseSeeder extends Seeder
         ]);
 
         User::query()->create([
-            'name' => 'System Administrator',
+            'name' => 'Administrator',
             'email' => 'admin@lnu.edu.ph',
             'password' => Hash::make('password'),
             'role' => UserRole::Admin,

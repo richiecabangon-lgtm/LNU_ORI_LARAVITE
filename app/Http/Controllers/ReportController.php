@@ -7,23 +7,56 @@ use App\Models\College;
 use App\Models\Department;
 use App\Models\FpesReportSetting;
 use App\Models\ResearchSubmission;
+use App\Models\ResearchType;
 use App\Models\User;
+use App\Services\FpesArchiveService;
 use Carbon\CarbonImmutable;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Collection;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Storage;
 use Illuminate\Validation\Rule;
 use Illuminate\Validation\ValidationException;
 use Inertia\Inertia;
 use Inertia\Response;
+use Symfony\Component\HttpFoundation\StreamedResponse;
 
 class ReportController extends Controller
 {
-    /** Role-based involvements have no publication date, so they fall back to when the record was approved or submitted. */
-    private const REPORT_DATE_SQL = 'COALESCE(publication_date, DATE(approved_at), DATE(submitted_at), DATE(created_at))';
+    private const REPORT_DATE_SQL = FpesArchiveService::REPORT_DATE_SQL;
 
-    public function fpes(Request $request): Response
+    private const SCOPUS_PUBLICATION_TYPE = 'published_research_published_individual_research_scopus_indexed_journal';
+
+    private const PATENT_TYPES = [
+        'patent',
+        'intellectual_property_patent_if_accepted',
+        'intellectual_property_patent_if_published',
+        'intellectual_property_patent_if_granted',
+    ];
+
+    private const EXPORT_COLUMNS = [
+        'date' => 'Report date',
+        'researcher' => 'Researcher',
+        'reference' => 'Reference',
+        'title' => 'Title',
+        'doi' => 'DOI',
+        'issn_isbn' => 'ISSN/ISBN',
+        'indexing' => 'Indexing',
+        'keywords' => 'Keywords',
+        'interests' => 'Interests',
+        'funding_source' => 'Funding source',
+        'funding_organization' => 'Funder',
+        'college' => 'College',
+        'department' => 'Department',
+        'research_type' => 'Research type',
+        'status' => 'Status',
+        'points' => 'FPES points',
+        'venue' => 'Venue',
+        'publisher' => 'Publisher',
+    ];
+
+    private function reportData(Request $request): array
     {
         $user = $request->user();
         $filters = $request->validate([
@@ -34,6 +67,9 @@ class ReportController extends Controller
             'semester' => ['nullable', 'integer', 'between:1,2'],
             'college_id' => ['nullable', 'integer', 'exists:colleges,id'],
             'department_id' => ['nullable', 'integer', 'exists:departments,id'],
+            'include_archived' => ['sometimes', 'boolean'],
+            'report_kind' => ['nullable', Rule::in(['all', 'scopus', 'patent'])],
+            'research_type' => ['nullable', 'string', 'exists:research_types,slug'],
         ]);
 
         $period = $filters['period'] ?? 'monthly';
@@ -42,7 +78,7 @@ class ReportController extends Controller
 
         $query = ResearchSubmission::query()
             ->with([
-                'faculty:id,name,email,employee_id,designation,college_id,department_id,orcid_url,google_scholar_url,institutional_profile_url',
+                'faculty:id,name,email,employee_id,designation,college_id,department_id,orcid_url,google_scholar_url,scopus_url,institutional_profile_url',
                 'college:id,name',
                 'department:id,name,college_id',
                 'researchType:slug,name',
@@ -54,8 +90,27 @@ class ReportController extends Controller
                 'sdgs:id,number,name,image_path',
                 'researchAgendas:id,name,image_path',
             ])
-            ->whereRaw(self::REPORT_DATE_SQL.' between ? and ?', [$start->toDateString(), $end->toDateString()])
+            ->whereRaw(self::REPORT_DATE_SQL.' >= ? and '.self::REPORT_DATE_SQL.' < ?', [$start->toDateString(), $end->addDay()->toDateString()])
             ->whereNot('status', 'draft');
+
+        if (($filters['report_kind'] ?? 'all') === 'scopus') {
+            $query->whereIn('research_type', [self::SCOPUS_PUBLICATION_TYPE, 'journal_article', 'conference_paper']);
+        } elseif (($filters['report_kind'] ?? 'all') === 'patent') {
+            $query->whereIn('research_type', self::PATENT_TYPES);
+        }
+
+        if (! empty($filters['research_type'])) {
+            $query->where('research_type', $filters['research_type']);
+        }
+
+        if (! $request->boolean('include_archived')) {
+            $query->whereNotExists(function ($archived) {
+                $archived->selectRaw('1')->from('fpes_archive_submissions')
+                    ->join('fpes_archives', 'fpes_archives.id', '=', 'fpes_archive_submissions.fpes_archive_id')
+                    ->whereColumn('fpes_archive_submissions.research_submission_id', 'research_submissions.id')
+                    ->whereNull('fpes_archives.restored_at');
+            });
+        }
 
         if ($user->role === UserRole::Faculty) {
             $query->where(function ($inner) use ($user) {
@@ -75,16 +130,30 @@ class ReportController extends Controller
         }
 
         $submissions = $query->orderBy('department_id')->orderBy('faculty_id')->orderByRaw(self::REPORT_DATE_SQL)->get();
+        if (($filters['report_kind'] ?? 'all') === 'scopus') {
+            $submissions = $submissions->filter(fn (ResearchSubmission $submission): bool => $submission->research_type === self::SCOPUS_PUBLICATION_TYPE
+                || collect(preg_split('/[,;|]/', (string) $submission->indexing))->contains(fn (string $entry): bool => mb_strtolower(trim($entry)) === 'scopus'))
+                ->values();
+        }
         $submissions->each(function (ResearchSubmission $submission) use ($user): void {
             $submission->setAttribute('report_date', ($submission->publication_date ?? $submission->approved_at ?? $submission->submitted_at ?? $submission->created_at)?->toDateString());
             $points = $submission->fpesPoints();
             if ($user->isFaculty()) {
                 $points = $submission->pointsForFaculty($user);
+                $submission->setAttribute('submitted_by_name', $submission->faculty_id !== $user->id ? $submission->faculty?->name : null);
                 $submission->setRelation('faculty', $user);
             }
 
             $submission->setAttribute('fpes_points', $points);
         });
+
+        return compact('filters', 'period', 'year', 'start', 'end', 'periodLabel', 'submissions');
+    }
+
+    public function fpes(Request $request): Response
+    {
+        $user = $request->user();
+        ['filters' => $filters, 'period' => $period, 'year' => $year, 'start' => $start, 'end' => $end, 'periodLabel' => $periodLabel, 'submissions' => $submissions] = $this->reportData($request);
         $settings = FpesReportSetting::query()
             ->with(['preparedByUser:id,name', 'reviewedByUser:id,name', 'approvedByUser:id,name'])
             ->first() ?? new FpesReportSetting;
@@ -132,8 +201,19 @@ class ReportController extends Controller
                 'semester' => $filters['semester'] ?? ($start->month < 7 ? 1 : 2),
                 'college_id' => $filters['college_id'] ?? null,
                 'department_id' => $filters['department_id'] ?? null,
+                'include_archived' => $request->boolean('include_archived'),
+                'report_kind' => $filters['report_kind'] ?? 'all',
+                'research_type' => $filters['research_type'] ?? null,
             ],
+            'researchTypes' => ResearchType::withTrashed()->orderBy('name')->get(['slug', 'name', 'is_active', 'deleted_at']),
             'scope' => $user->role->value,
+            'archives' => $user->isAdmin() ? DB::table('fpes_archives')
+                ->join('users as creator', 'creator.id', '=', 'fpes_archives.created_by')
+                ->leftJoin('users as restorer', 'restorer.id', '=', 'fpes_archives.restored_by')
+                ->select('fpes_archives.*', 'creator.name as creator_name', 'restorer.name as restorer_name')
+                ->selectSub(DB::table('fpes_archive_submissions')->selectRaw('count(*)')->whereColumn('fpes_archive_id', 'fpes_archives.id'), 'submission_count')
+                ->orderByDesc('fpes_archives.id')->get() : [],
+            'exportColumns' => $user->isAdmin() ? self::EXPORT_COLUMNS : [],
             'colleges' => $user->isAdmin()
                 ? College::query()->orderBy('name')->get(['id', 'name'])
                 : [],
@@ -143,6 +223,62 @@ class ReportController extends Controller
             'coordinators' => $user->isAdmin()
                 ? User::query()->where('role', UserRole::Coordinator)->where('is_active', true)->orderBy('name')->get(['id', 'name', 'department_id'])
                 : [],
+        ]);
+    }
+
+    public function exportFpes(Request $request): StreamedResponse
+    {
+        abort_unless($request->user()->isAdmin(), 403);
+
+        $validated = $request->validate([
+            'columns' => ['required', 'array', 'min:1', 'max:'.count(self::EXPORT_COLUMNS)],
+            'columns.*' => ['required', 'string', 'distinct', Rule::in(array_keys(self::EXPORT_COLUMNS))],
+        ]);
+
+        ['submissions' => $submissions, 'start' => $start, 'end' => $end] = $this->reportData($request);
+        $columns = $validated['columns'];
+
+        return response()->streamDownload(function () use ($submissions, $columns): void {
+            $output = fopen('php://output', 'w');
+            fwrite($output, "\xEF\xBB\xBF");
+            fputcsv($output, array_map(fn (string $column): string => self::EXPORT_COLUMNS[$column], $columns), ',', '"', '', "\r\n");
+
+            foreach ($submissions as $submission) {
+                $row = array_map(function (string $column) use ($submission): string {
+                    $value = match ($column) {
+                        'date' => $submission->report_date,
+                        'researcher' => $submission->faculty?->name,
+                        'reference' => $submission->reference_code,
+                        'title' => $submission->title,
+                        'doi' => $submission->doi,
+                        'issn_isbn' => $submission->issn_isbn,
+                        'indexing' => $submission->indexing,
+                        'keywords' => $submission->keywords,
+                        'interests' => implode(', ', $submission->research_interests ?? []),
+                        'funding_source' => $submission->funding_source,
+                        'funding_organization' => $submission->funding_organization,
+                        'college' => $submission->college?->name,
+                        'department' => $submission->department?->name,
+                        'research_type' => $submission->research_type_label,
+                        'status' => $submission->status->value,
+                        'points' => $submission->fpes_points,
+                        'venue' => $submission->venue,
+                        'publisher' => $submission->publisher,
+                    };
+
+                    $text = (string) ($value ?? '');
+                    $dangerous = preg_match('/^(?:[\p{Z}\s\p{C}]*[=+\-@]|[\p{C}])/u', $text);
+
+                    return $dangerous !== 0 ? "'".$text : $text;
+                }, $columns);
+                fputcsv($output, $row, ',', '"', '', "\r\n");
+            }
+
+            fclose($output);
+        }, 'fpes-'.$start->toDateString().'-'.$end->toDateString().'.csv', [
+            'Content-Type' => 'text/csv; charset=UTF-8',
+            'Cache-Control' => 'private, no-store',
+            'X-Content-Type-Options' => 'nosniff',
         ]);
     }
 

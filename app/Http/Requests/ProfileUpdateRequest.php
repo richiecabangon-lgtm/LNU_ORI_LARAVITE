@@ -29,7 +29,20 @@ class ProfileUpdateRequest extends FormRequest
             'academic_rank' => ['nullable', 'string', 'max:100'],
             'orcid_url' => ['nullable', 'url', 'max:255'],
             'google_scholar_url' => ['nullable', 'url', 'max:255'],
+            'scopus_url' => [
+                'nullable', 'bail', 'string', 'url:http,https', 'max:255',
+                function (string $attribute, string $value, \Closure $fail): void {
+                    $parts = parse_url($value);
+
+                    if ($parts === false || ! in_array(strtolower($parts['host'] ?? ''), ['scopus.com', 'www.scopus.com'], true)
+                        || isset($parts['user']) || isset($parts['pass'])) {
+                        $fail('The Scopus profile must be a URL on scopus.com.');
+                    }
+                },
+            ],
             'institutional_profile_url' => ['nullable', 'url', 'max:255'],
+            'research_interests' => ['sometimes', 'nullable', 'array', 'list', 'max:5'],
+            'research_interests.*' => ['required', 'string', 'max:255'],
         ];
     }
 }

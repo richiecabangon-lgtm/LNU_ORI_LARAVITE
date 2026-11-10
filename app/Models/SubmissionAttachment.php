@@ -22,6 +22,7 @@ class SubmissionAttachment extends Model
         'size',
         'category',
         'uploaded_by',
+        'research_evidence_requirement_id',
     ];
 
     public function submission(): BelongsTo

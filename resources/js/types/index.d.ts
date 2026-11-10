@@ -8,6 +8,7 @@ export interface User {
     academic_rank?: string | null;
     orcid_url?: string | null;
     google_scholar_url?: string | null;
+    scopus_url?: string | null;
     institutional_profile_url?: string | null;
     college_id?: number | null;
     department_id?: number | null;

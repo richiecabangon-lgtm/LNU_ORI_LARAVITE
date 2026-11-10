@@ -7,7 +7,6 @@ use App\Models\ResearchSubmission;
 use App\Models\ResearchSubmissionAuthor;
 use App\Models\User;
 use Illuminate\Http\UploadedFile;
-use Illuminate\Support\Facades\Storage;
 use Illuminate\Validation\ValidationException;
 
 class ResearchSubmissionAuthorService
@@ -15,7 +14,7 @@ class ResearchSubmissionAuthorService
     /**
      * @param  list<array{name: string, email?: string|null, institution?: string|null, allocated_points: int|float|string, authorization_file?: UploadedFile|null}>  $authors
      */
-    public function sync(ResearchSubmission $submission, array $authors, float $totalPoints): void
+    public function sync(ResearchSubmission $submission, array $authors, float $totalPoints, array &$storedFiles, array &$obsoleteFiles): void
     {
         $authors = array_values(array_filter($authors, fn (array $author): bool => trim($author['name']) !== ''));
         if ($authors === []) {
@@ -57,7 +56,7 @@ class ResearchSubmissionAuthorService
         foreach ($existingAuthors as $existingAuthor) {
             $key = mb_strtolower(trim((string) ($existingAuthor->email ?: $existingAuthor->name)));
             if (! $submittedNames->contains($key) && $existingAuthor->authorization_path) {
-                Storage::disk($existingAuthor->authorization_disk ?? 'local')->delete($existingAuthor->authorization_path);
+                $obsoleteFiles[] = [$existingAuthor->authorization_disk ?? 'local', $existingAuthor->authorization_path];
             }
         }
 
@@ -98,12 +97,16 @@ class ResearchSubmissionAuthorService
             $previousProof = $existingProofs->get(mb_strtolower(trim($email !== '' ? $email : $author['name'])));
             $proofPath = $proof?->store('research-authorizations/'.$submission->uuid, 'local');
 
+            if ($proofPath) {
+                $storedFiles[] = ['local', $proofPath];
+            }
+
             if (! $proofPath && $previousProof?->authorization_path) {
                 $proofPath = $previousProof->authorization_path;
             }
 
             if ($proofPath && $previousProof?->authorization_path && $proofPath !== $previousProof->authorization_path) {
-                Storage::disk($previousProof->authorization_disk ?? 'local')->delete($previousProof->authorization_path);
+                $obsoleteFiles[] = [$previousProof->authorization_disk ?? 'local', $previousProof->authorization_path];
             }
 
             ResearchSubmissionAuthor::query()->create([

@@ -5,6 +5,8 @@ import PageHeader from '@/Components/ORI/PageHeader.vue';
 import StatusBadge from '@/Components/ORI/StatusBadge.vue';
 import AttachmentViewer from '@/Components/ORI/AttachmentViewer.vue';
 import AuthorizationProofLink from '@/Components/ORI/AuthorizationProofLink.vue';
+import EvidenceHistory from '@/Components/ORI/EvidenceHistory.vue';
+import { formatFundingSource } from '@/Utils/fundingSource';
 import { Head, Link, useForm } from '@inertiajs/vue3';
 
 const props = defineProps<{
@@ -55,6 +57,14 @@ const submit = () => {
             <section class="ori-card space-y-4 p-6 lg:col-span-3">
                 <h2 class="font-display text-xl font-semibold">Submission dossier</h2>
                 <dl class="grid gap-4 sm:grid-cols-2 text-sm">
+                    <div class="sm:col-span-2">
+                        <dt class="text-ori-blue-400">Research interests</dt>
+                        <dd class="break-words font-medium">{{ submission.research_interests?.join(', ') || '—' }}</dd>
+                    </div>
+                    <div>
+                        <dt class="text-ori-blue-400">Funding source</dt>
+                        <dd class="break-words font-medium">{{ formatFundingSource(submission.funding_source, submission.funding_organization) }}</dd>
+                    </div>
                     <div>
                         <dt class="text-ori-blue-400">College</dt>
                         <dd class="font-medium">{{ submission.college?.name || '—' }}</dd>
@@ -97,6 +107,7 @@ const submit = () => {
                 </div>
 
                 <AttachmentViewer v-if="submission.attachments?.length" :attachments="submission.attachments" title="Evidence files" />
+                <EvidenceHistory :histories="submission.status_histories ?? []" />
             </section>
 
             <section class="ori-card p-6 lg:col-span-2">

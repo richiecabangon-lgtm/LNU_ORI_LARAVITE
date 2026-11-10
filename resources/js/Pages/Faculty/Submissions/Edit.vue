@@ -6,6 +6,7 @@ import AgendaContextDisclosure from '@/Components/ORI/AgendaContextDisclosure.vu
 import AttachmentViewer from '@/Components/ORI/AttachmentViewer.vue';
 import LocalFilePreview from '@/Components/ORI/LocalFilePreview.vue';
 import AuthorizationProofLink from '@/Components/ORI/AuthorizationProofLink.vue';
+import ResearchInterestsInput from '@/Components/ORI/ResearchInterestsInput.vue';
 import { Head, router, useForm } from '@inertiajs/vue3';
 import { computed, watch } from 'vue';
 
@@ -13,7 +14,7 @@ const props = defineProps<{
     uploadLimits: { file: number; total: number };
     submission: any;
     academicYears: Array<{ id: number; name: string; is_current: boolean }>;
-    researchTypes: Array<{ value: string; label: string; group?: string; has_authors?: boolean }>;
+    researchTypes: Array<{ value: string; label: string; group?: string; has_authors?: boolean; requirements: Array<{ id: number; name: string; is_required: boolean }> }>;
     researchTypePoints: Record<string, number | string>;
     currentFaculty: { id: number; name: string; email: string };
     facultyDirectory: Array<{ id: number; name: string; email: string; college: { name: string } | null; department: { name: string } | null }>;
@@ -51,6 +52,10 @@ const form = useForm({
     research_type: props.submission.research_type,
     academic_year_id: props.submission.academic_year_id,
     abstract: props.submission.abstract || '',
+    keywords: props.submission.keywords || '',
+    research_interests: [...(props.submission.research_interests ?? [])] as string[],
+    funding_source: props.submission.funding_source || '',
+    funding_organization: props.submission.funding_organization || '',
     authors: existingAuthors.map((author: any) => author.name),
     sdgs: (props.submission.sdgs ?? []).map((sdg: { id: number }) => sdg.id),
     research_agendas: (props.submission.research_agendas ?? []).map((agenda: { id: number }) => agenda.id),
@@ -67,6 +72,8 @@ const form = useForm({
     claimed_points: props.submission.claimed_points || '',
     faculty_remarks: props.submission.faculty_remarks || '',
     attachments: [] as File[],
+    attachment_requirements: [] as Array<number | string>,
+    existing_attachment_requirements: Object.fromEntries((props.submission.attachments ?? []).map((file: any) => [file.id, props.researchTypes.find((type) => type.value === props.submission.research_type)?.requirements.some((requirement) => requirement.id === file.research_evidence_requirement_id) ? file.research_evidence_requirement_id : ''])) as Record<string, number | string>,
     submit_now: false,
 });
 
@@ -83,6 +90,11 @@ const uploadProblem = computed(() => {
     return total > props.uploadLimits.total * 0.95 ? `The selected files total ${(total / 1048576).toFixed(1)} MB, above the ${megabytes(props.uploadLimits.total)} limit for one submission. Remove some files or save the draft first and add the rest later.` : '';
 });
 const involvementHasAuthors = computed(() => props.researchTypes.find((type) => type.value === form.research_type)?.has_authors ?? true);
+const requirements = computed(() => props.researchTypes.find((type) => type.value === form.research_type)?.requirements ?? []);
+watch(() => form.research_type, () => {
+    form.attachment_requirements = form.attachments.map(() => '');
+    Object.keys(form.existing_attachment_requirements).forEach((id) => { form.existing_attachment_requirements[id] = ''; });
+});
 const titleLabel = computed(() => involvementHasAuthors.value ? 'Research title' : 'Title of the paper, thesis or activity');
 const allocationsMatch = computed(() => !involvementHasAuthors.value || Math.abs(allocatedPointsTotal.value - configuredPoints.value) <= 0.01);
 const authorDetailsError = computed(() => (form.errors as Record<string, string>).author_details);
@@ -158,7 +170,7 @@ const onFiles = (event: Event) => {
 
 const removeSavedAttachment = (attachment: { id: number; original_name: string }) => {
     if (confirm(`Remove ${attachment.original_name}?`)) {
-        router.delete(route('submission-attachments.destroy', attachment.id), { preserveScroll: true });
+        router.delete(route('submission-attachments.destroy', attachment.id), { preserveScroll: true, onSuccess: () => { delete form.existing_attachment_requirements[attachment.id]; } });
     }
 };
 
@@ -176,8 +188,10 @@ const save = (submitNow: boolean) => {
             email: author.email || (author.name.toLowerCase() === props.currentFaculty.name.toLowerCase() ? props.currentFaculty.email : ''),
         }));
 
+        const interests = data.research_interests.map((interest) => interest.trim()).filter(Boolean);
         return {
             ...data,
+            research_interests: interests.length ? interests : null,
             authors: authorDetails.map((author) => author.name),
             author_details: authorDetails,
             claimed_points: configuredPoints.value,
@@ -199,6 +213,7 @@ const save = (submitNow: boolean) => {
         />
 
         <form class="ori-card space-y-6 p-6" @submit.prevent="save(false)">
+            <div v-if="Object.keys(form.errors).length" role="alert" class="border border-rose-200 bg-rose-50 px-4 py-3 text-sm text-rose-800"><p v-for="(message, field) in form.errors" :key="field">{{ message }}</p></div>
             <div class="grid gap-4 md:grid-cols-2">
                 <div class="md:col-span-2">
                     <label class="ori-label">{{ titleLabel }}</label>
@@ -224,6 +239,27 @@ const save = (submitNow: boolean) => {
                 <div class="md:col-span-2">
                     <label class="ori-label">Abstract / summary</label>
                     <textarea v-model="form.abstract" rows="4" class="ori-input" />
+                </div>
+                <div class="md:col-span-2">
+                    <label class="ori-label" for="submission-keywords">Keywords</label>
+                    <input id="submission-keywords" v-model="form.keywords" type="text" maxlength="2000" class="ori-input" />
+                    <InputError :message="form.errors.keywords" class="mt-1" />
+                </div>
+                <ResearchInterestsInput v-model="form.research_interests" :errors="form.errors" id-prefix="submission-interest" class="md:col-span-2" />
+                <div>
+                    <label class="ori-label" for="funding-source">Funding source</label>
+                    <select id="funding-source" v-model="form.funding_source" class="ori-input" @change="form.funding_source !== 'external' && (form.funding_organization = '')">
+                        <option value="">Not specified</option>
+                        <option value="personal">Personal (sole)</option>
+                        <option value="internal">Internal (LNU funded)</option>
+                        <option value="external">External</option>
+                    </select>
+                    <InputError :message="form.errors.funding_source" class="mt-1" />
+                </div>
+                <div v-if="form.funding_source === 'external'">
+                    <label class="ori-label" for="funding-organization">Funding organization <span aria-hidden="true" class="text-rose-600">*</span><span class="sr-only"> required</span></label>
+                    <input id="funding-organization" v-model="form.funding_organization" type="text" maxlength="255" placeholder="e.g. DOST or CHED" class="ori-input" required />
+                    <InputError :message="form.errors.funding_organization" class="mt-1" />
                 </div>
                 <fieldset class="md:col-span-2 border-y border-ori-blue-100 py-4"><legend class="ori-label">Sustainable Development Goals</legend><div class="grid gap-2 sm:grid-cols-2 lg:grid-cols-3"><label v-for="sdg in sdgs" :key="sdg.id" class="flex cursor-pointer items-center gap-3 border border-ori-blue-100 p-2 text-sm text-ori-blue-800 hover:bg-ori-blue-50"><input v-model="form.sdgs" type="checkbox" :value="sdg.id" class="rounded border-ori-blue-300 text-ori-blue-700" /><img v-if="sdg.image_url" :src="sdg.image_url" :alt="`SDG ${sdg.number}: ${sdg.name}`" class="h-12 w-12 shrink-0 rounded object-cover" /><span v-else class="h-12 w-12 shrink-0 rounded bg-ori-blue-50" aria-hidden="true"></span><span><strong>SDG {{ sdg.number }}</strong><span class="block">{{ sdg.name }}</span></span></label></div><InputError :message="form.errors.sdgs" class="mt-2" /></fieldset>
                 <fieldset class="md:col-span-2 border-b border-ori-blue-100 py-4">
@@ -296,11 +332,13 @@ const save = (submitNow: boolean) => {
                 </div>
                 <div class="md:col-span-2">
                     <label class="ori-label" for="evidence-files">Attachments</label>
+                    <ul v-if="requirements.length" class="mb-3 space-y-1 text-sm text-ori-blue-700"><li v-for="requirement in requirements" :key="requirement.id">{{ requirement.name }} <span class="text-xs">({{ requirement.is_required ? 'Required for submission' : 'Optional' }})</span></li></ul>
                     <div v-if="submission.attachments?.length" class="mb-4">
                         <AttachmentViewer :attachments="submission.attachments" title="Saved attachments" />
                         <ul class="mt-3 divide-y divide-ori-blue-100 border-y border-ori-blue-100 text-sm">
-                            <li v-for="file in submission.attachments" :key="file.id" class="flex items-center justify-between gap-3 py-2">
+                            <li v-for="file in submission.attachments" :key="file.id" class="flex flex-wrap items-center justify-between gap-3 py-2">
                                 <span class="min-w-0 break-words">{{ file.original_name }}</span>
+                                <label class="min-w-48 flex-1"><span class="sr-only">Requirement for {{ file.original_name }}</span><select v-model="form.existing_attachment_requirements[file.id]" class="ori-input"><option value="">Unlabelled attachment</option><option v-for="requirement in requirements" :key="requirement.id" :value="requirement.id">{{ requirement.name }}</option></select></label>
                                 <button type="button" class="text-xs font-semibold text-rose-700" @click="removeSavedAttachment(file)">Remove</button>
                             </li>
                         </ul>
@@ -308,9 +346,10 @@ const save = (submitNow: boolean) => {
                     <input id="evidence-files" type="file" multiple accept=".pdf,.doc,.docx,.jpg,.jpeg,.png,.webp" class="ori-input" @change="onFiles" />
                     <p class="mt-1 text-xs text-ori-blue-500">Add more files (up to 20 per save). PDF, DOC, DOCX, JPG, PNG, or WebP up to 10MB each.</p>
                     <ul v-if="form.attachments.length" class="mt-3 divide-y divide-ori-blue-100 border-y border-ori-blue-100 text-sm">
-                        <li v-for="(file, index) in form.attachments" :key="`${file.name}-${file.size}`" class="flex items-center justify-between gap-3 py-2">
+                        <li v-for="(file, index) in form.attachments" :key="`${file.name}-${file.size}`" class="flex flex-wrap items-center justify-between gap-3 py-2">
                             <span class="min-w-0 break-words">{{ file.name }} <span class="text-xs text-ori-blue-400">{{ (file.size / 1048576).toFixed(2) }} MB</span></span>
-                            <span class="flex items-center gap-4"><LocalFilePreview :file="file" /><button type="button" class="text-xs font-semibold text-rose-700" @click="form.attachments.splice(index, 1)">Remove</button></span>
+                            <label class="min-w-48 flex-1"><span class="sr-only">Requirement for {{ file.name }}</span><select v-model="form.attachment_requirements[index]" class="ori-input"><option value="">Unlabelled attachment</option><option v-for="requirement in requirements" :key="requirement.id" :value="requirement.id">{{ requirement.name }}</option></select></label>
+                            <span class="flex items-center gap-4"><LocalFilePreview :file="file" /><button type="button" class="text-xs font-semibold text-rose-700" @click="form.attachments.splice(index, 1); form.attachment_requirements.splice(index, 1)">Remove</button></span>
                         </li>
                     </ul>
                     <InputError :message="form.errors.attachments" class="mt-1" />

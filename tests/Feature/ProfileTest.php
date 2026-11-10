@@ -72,6 +72,43 @@ test('profile information can be updated', function () {
     $this->assertNull($user->email_verified_at);
 });
 
+test('scopus profile can be saved updated and removed', function () {
+    $user = User::factory()->faculty()->create();
+
+    foreach (['https://www.scopus.com/authid/detail.uri?authorId=123', 'http://scopus.com/pages/author/456', null] as $url) {
+        $this->actingAs($user)->patch(route('profile.update'), [
+            'name' => $user->name,
+            'email' => $user->email,
+            'scopus_url' => $url,
+        ])->assertSessionHasNoErrors()->assertRedirect(route('profile.edit'));
+
+        $this->assertDatabaseHas('users', ['id' => $user->id, 'scopus_url' => $url]);
+        $this->get(route('profile.edit'))->assertInertia(fn (Assert $page) => $page
+            ->where('user.scopus_url', $url)
+            ->where('auth.user.scopus_url', $url));
+    }
+});
+
+test('invalid scopus profile links are rejected without changing the saved link', function (mixed $url) {
+    $savedUrl = 'https://www.scopus.com/authid/detail.uri?authorId=123';
+    $user = User::factory()->create(['scopus_url' => $savedUrl]);
+
+    $this->actingAs($user)->patch(route('profile.update'), [
+        'name' => $user->name,
+        'email' => $user->email,
+        'scopus_url' => $url,
+    ])->assertSessionHasErrors('scopus_url');
+
+    $this->assertDatabaseHas('users', ['id' => $user->id, 'scopus_url' => $savedUrl]);
+})->with([
+    'javascript' => 'javascript:alert(1)',
+    'other scheme' => 'ftp://www.scopus.com/authid/detail.uri?authorId=123',
+    'lookalike host' => 'https://www.scopus.com.example.com/authid/detail.uri?authorId=123',
+    'misleading user info' => 'https://www.scopus.com@evil.example/profile',
+    'credentials' => 'https://user@www.scopus.com/authid/detail.uri?authorId=123',
+    'not a string' => [['https://www.scopus.com']],
+]);
+
 test('email verification status is unchanged when the email address is unchanged', function () {
     $user = User::factory()->create();
 

@@ -111,6 +111,7 @@ it('includes scholarly profile destinations on the faculty research profile', fu
         'academic_rank' => 'Associate Professor',
         'orcid_url' => 'https://orcid.org/0000-0000-0000-0001',
         'google_scholar_url' => 'https://scholar.google.com/citations?user=faculty-profile',
+        'scopus_url' => 'https://www.scopus.com/authid/detail.uri?authorId=123',
         'institutional_profile_url' => 'https://www.lnu.edu.ph/faculty/researcher',
     ]);
 
@@ -121,7 +122,30 @@ it('includes scholarly profile destinations on the faculty research profile', fu
             ->where('faculty.academic_rank', 'Associate Professor')
             ->where('faculty.orcid_url', 'https://orcid.org/0000-0000-0000-0001')
             ->where('faculty.google_scholar_url', 'https://scholar.google.com/citations?user=faculty-profile')
+            ->where('faculty.scopus_url', 'https://www.scopus.com/authid/detail.uri?authorId=123')
             ->where('faculty.institutional_profile_url', 'https://www.lnu.edu.ph/faculty/researcher'));
+});
+
+it('restricts scopus profile links to authorized research profile viewers', function () {
+    $college = College::query()->create(['code' => 'SC', 'name' => 'Scopus College']);
+    $department = Department::query()->create(['college_id' => $college->id, 'code' => 'SC1', 'name' => 'Scopus Department']);
+    $otherDepartment = Department::query()->create(['college_id' => $college->id, 'code' => 'SC2', 'name' => 'Other Department']);
+    $url = 'https://www.scopus.com/authid/detail.uri?authorId=123';
+    $faculty = User::factory()->faculty()->create(['department_id' => $department->id, 'scopus_url' => $url]);
+    $coordinator = User::factory()->coordinator()->create(['department_id' => $department->id]);
+    $otherCoordinator = User::factory()->coordinator()->create(['department_id' => $otherDepartment->id]);
+    $otherFaculty = User::factory()->faculty()->create();
+    $admin = User::factory()->admin()->create();
+
+    foreach ([$faculty, $coordinator, $admin] as $viewer) {
+        $this->actingAs($viewer)->get(route('research-profiles.show', $faculty))
+            ->assertInertia(fn (Assert $page) => $page->where('faculty.scopus_url', $url));
+    }
+
+    $this->actingAs($otherCoordinator)->get(route('research-profiles.show', $faculty))->assertNotFound();
+    $this->actingAs($otherFaculty)->get(route('research-profiles.show', $faculty))->assertForbidden();
+    auth()->logout();
+    $this->get(route('research-profiles.show', $faculty))->assertRedirect(route('login'));
 });
 
 it('provides agenda descriptions in the faculty submission choices', function () {
@@ -241,6 +265,44 @@ it('returns a visible validation error when a required submission title is missi
         ->assertSessionHasErrors('title');
 
     expect(ResearchSubmission::query()->count())->toBe(0);
+});
+
+it('saves and updates research keywords on a draft', function () {
+    $fixture = makeResearchCreditFixture();
+    $payload = researchCreditPayload($fixture);
+    $payload['submit_now'] = false;
+    $payload['keywords'] = 'education, rural schools';
+
+    $this->actingAs($fixture['submitter'])
+        ->post(route('faculty.submissions.store'), $payload)
+        ->assertSessionHasNoErrors();
+
+    $submission = ResearchSubmission::query()->firstOrFail();
+    expect($submission->keywords)->toBe('education, rural schools');
+
+    $payload['keywords'] = 'education, local communities';
+    $this->put(route('faculty.submissions.update', $submission), $payload)->assertSessionHasNoErrors();
+
+    expect($submission->fresh()->keywords)->toBe('education, local communities');
+    $this->get(route('faculty.submissions.show', $submission))
+        ->assertInertia(fn (Assert $page) => $page->where('submission.keywords', 'education, local communities'));
+});
+
+it('rejects keywords longer than the supported limit on create and update', function () {
+    $fixture = makeResearchCreditFixture();
+    $payload = researchCreditPayload($fixture);
+    $payload['submit_now'] = false;
+    $payload['keywords'] = str_repeat('a', 2001);
+
+    $this->actingAs($fixture['submitter'])->post(route('faculty.submissions.store'), $payload)->assertSessionHasErrors('keywords');
+    expect(ResearchSubmission::query()->count())->toBe(0);
+
+    $payload['keywords'] = 'valid';
+    $this->post(route('faculty.submissions.store'), $payload)->assertSessionHasNoErrors();
+    $submission = ResearchSubmission::query()->firstOrFail();
+    $payload['keywords'] = str_repeat('a', 2001);
+    $this->put(route('faculty.submissions.update', $submission), $payload)->assertSessionHasErrors('keywords');
+    expect($submission->fresh()->keywords)->toBe('valid');
 });
 
 it('blocks same-type duplicate titles but permits the title under a different research type', function () {

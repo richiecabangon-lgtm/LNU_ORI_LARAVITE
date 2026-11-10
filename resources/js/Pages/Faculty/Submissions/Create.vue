@@ -4,6 +4,7 @@ import InputError from '@/Components/InputError.vue';
 import PageHeader from '@/Components/ORI/PageHeader.vue';
 import AgendaContextDisclosure from '@/Components/ORI/AgendaContextDisclosure.vue';
 import LocalFilePreview from '@/Components/ORI/LocalFilePreview.vue';
+import ResearchInterestsInput from '@/Components/ORI/ResearchInterestsInput.vue';
 import { Head, useForm } from '@inertiajs/vue3';
 import axios from 'axios';
 import { computed, ref, watch } from 'vue';
@@ -11,11 +12,11 @@ import { computed, ref, watch } from 'vue';
 const props = defineProps<{
     uploadLimits: { file: number; total: number };
     academicYears: Array<{ id: number; name: string; is_current: boolean }>;
-    researchTypes: Array<{ value: string; label: string; group?: string; has_authors?: boolean }>;
+    researchTypes: Array<{ value: string; label: string; group?: string; has_authors?: boolean; requirements: Array<{ id: number; name: string; is_required: boolean }> }>;
     researchTypePoints: Record<string, number | string>;
     sdgs: Array<{ id: number; number: number; name: string; image_url: string | null }>;
     researchAgendas: Array<{ id: number; name: string; description: string | null; image_url: string | null }>;
-    currentFaculty: { id: number; name: string; email: string; institutional_profile_url: string | null };
+    currentFaculty: { id: number; name: string; email: string; institutional_profile_url: string | null; research_interests: string[] | null };
     facultyDirectory: Array<{ id: number; name: string; email: string; college: { name: string } | null; department: { name: string } | null }>;
 }>();
 
@@ -32,6 +33,10 @@ const form = useForm({
     research_type: props.researchTypes[0]?.value || '',
     academic_year_id: currentYear,
     abstract: '',
+    keywords: '',
+    research_interests: [...(props.currentFaculty.research_interests ?? [])],
+    funding_source: '',
+    funding_organization: '',
     authors: [''],
     sdgs: [] as number[],
     research_agendas: props.researchAgendas.length ? [props.researchAgendas[0].id] : [] as number[],
@@ -48,6 +53,7 @@ const form = useForm({
     claimed_points: '',
     faculty_remarks: '',
     attachments: [] as File[],
+    attachment_requirements: [] as Array<number | string>,
     submit_now: false,
 });
 
@@ -66,6 +72,8 @@ const uploadProblem = computed(() => {
     return total > props.uploadLimits.total * 0.95 ? `The selected files total ${(total / 1048576).toFixed(1)} MB, above the ${megabytes(props.uploadLimits.total)} limit for one submission. Remove some files or save the draft first and add the rest later.` : '';
 });
 const involvementHasAuthors = computed(() => props.researchTypes.find((type) => type.value === form.research_type)?.has_authors ?? true);
+const requirements = computed(() => props.researchTypes.find((type) => type.value === form.research_type)?.requirements ?? []);
+watch(() => form.research_type, () => { form.attachment_requirements = form.attachments.map(() => ''); });
 const titleLabel = computed(() => involvementHasAuthors.value ? 'Research title' : 'Title of the paper, thesis or activity');
 const allocatedPointsTotal = computed(() => form.author_points.reduce((total, points) => total + Number(points || 0), 0));
 const allocationsMatch = computed(() => !involvementHasAuthors.value || Math.abs(allocatedPointsTotal.value - configuredPoints.value) <= 0.01);
@@ -97,6 +105,7 @@ function formatValidationField(field: string): string {
         authors: 'Authors',
         author_details: 'Authors and point shares',
         attachments: 'Evidence attachments',
+        evidence: 'Required evidence',
     } as Record<string, string>)[field] ?? field.replaceAll('_', ' ');
 }
 
@@ -194,6 +203,7 @@ const onFiles = async (event: Event) => {
         const fields = data.fields as Record<string, string | string[]>;
         if (!form.title.trim() && typeof fields.title === 'string') form.title = fields.title;
         if (!form.abstract.trim() && typeof fields.abstract === 'string') form.abstract = fields.abstract;
+        if (!form.keywords.trim() && Array.isArray(fields.keywords)) form.keywords = fields.keywords.join(', ');
         if (!form.doi.trim() && typeof fields.doi === 'string') form.doi = fields.doi;
         if (!form.publication_date && typeof fields.publication_date === 'string') form.publication_date = fields.publication_date;
         if (form.authors.every((author) => !author.trim()) && Array.isArray(fields.authors)) {
@@ -242,8 +252,10 @@ const save = (submitNow: boolean) => {
                 email: author.email || (author.name.toLowerCase() === props.currentFaculty.name.toLowerCase() ? props.currentFaculty.email : ''),
             }));
 
+        const interests = data.research_interests.map((interest) => interest.trim()).filter(Boolean);
         return {
             ...data,
+            research_interests: interests.length ? interests : null,
             authors: authorDetails.map((author) => author.name),
             author_details: authorDetails,
             claimed_points: configuredPoints.value,
@@ -304,6 +316,30 @@ const save = (submitNow: boolean) => {
                 <div class="md:col-span-2">
                     <label class="ori-label">Abstract / summary</label>
                     <textarea v-model="form.abstract" rows="4" class="ori-input" />
+                </div>
+
+                <div class="md:col-span-2">
+                    <label class="ori-label" for="submission-keywords">Keywords</label>
+                    <input id="submission-keywords" v-model="form.keywords" type="text" maxlength="2000" class="ori-input" />
+                    <InputError :message="form.errors.keywords" class="mt-1" />
+                </div>
+
+                <ResearchInterestsInput v-model="form.research_interests" :errors="form.errors" id-prefix="submission-interest" class="md:col-span-2" />
+
+                <div>
+                    <label class="ori-label" for="funding-source">Funding source</label>
+                    <select id="funding-source" v-model="form.funding_source" class="ori-input" @change="form.funding_source !== 'external' && (form.funding_organization = '')">
+                        <option value="">Not specified</option>
+                        <option value="personal">Personal (sole)</option>
+                        <option value="internal">Internal (LNU funded)</option>
+                        <option value="external">External</option>
+                    </select>
+                    <InputError :message="form.errors.funding_source" class="mt-1" />
+                </div>
+                <div v-if="form.funding_source === 'external'">
+                    <label class="ori-label" for="funding-organization">Funding organization <span aria-hidden="true" class="text-rose-600">*</span><span class="sr-only"> required</span></label>
+                    <input id="funding-organization" v-model="form.funding_organization" type="text" maxlength="255" placeholder="e.g. DOST or CHED" class="ori-input" required />
+                    <InputError :message="form.errors.funding_organization" class="mt-1" />
                 </div>
 
                 <fieldset class="md:col-span-2 border-y border-ori-blue-100 py-4">
@@ -404,12 +440,14 @@ const save = (submitNow: boolean) => {
                 </div>
                 <div class="md:col-span-2">
                     <label class="ori-label" for="evidence-files">Evidence attachments</label>
+                    <ul v-if="requirements.length" class="mb-3 space-y-1 text-sm text-ori-blue-700"><li v-for="requirement in requirements" :key="requirement.id">{{ requirement.name }} <span class="text-xs">({{ requirement.is_required ? 'Required for submission' : 'Optional' }})</span></li></ul>
                     <input id="evidence-files" type="file" multiple accept=".pdf,.doc,.docx,.jpg,.jpeg,.png,.webp" class="ori-input" @change="onFiles" />
                     <p class="mt-1 text-xs text-ori-blue-500">Add as many files as needed (up to 20), selecting more than once if you wish. PDF, DOC, DOCX, JPG, PNG, or WebP up to 10MB each. The first supported paper is analyzed locally for suggested details.</p>
                     <ul v-if="form.attachments.length" class="mt-3 divide-y divide-ori-blue-100 border-y border-ori-blue-100 text-sm">
-                        <li v-for="(file, index) in form.attachments" :key="`${file.name}-${file.size}`" class="flex items-center justify-between gap-3 py-2">
+                        <li v-for="(file, index) in form.attachments" :key="`${file.name}-${file.size}`" class="flex flex-wrap items-center justify-between gap-3 py-2">
                             <span class="min-w-0 break-words">{{ file.name }} <span class="text-xs text-ori-blue-400">{{ (file.size / 1048576).toFixed(2) }} MB</span></span>
-                            <span class="flex items-center gap-4"><LocalFilePreview :file="file" /><button type="button" class="text-xs font-semibold text-rose-700" @click="form.attachments.splice(index, 1)">Remove</button></span>
+                            <label class="min-w-48 flex-1"><span class="sr-only">Requirement for {{ file.name }}</span><select v-model="form.attachment_requirements[index]" class="ori-input"><option value="">Unlabelled attachment</option><option v-for="requirement in requirements" :key="requirement.id" :value="requirement.id">{{ requirement.name }}</option></select></label>
+                            <span class="flex items-center gap-4"><LocalFilePreview :file="file" /><button type="button" class="text-xs font-semibold text-rose-700" @click="form.attachments.splice(index, 1); form.attachment_requirements.splice(index, 1)">Remove</button></span>
                         </li>
                     </ul>
                     <InputError :message="form.errors.attachments" class="mt-1" />

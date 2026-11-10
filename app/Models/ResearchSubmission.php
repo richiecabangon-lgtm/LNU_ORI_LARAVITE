@@ -28,6 +28,10 @@ class ResearchSubmission extends Model
         'title',
         'research_type',
         'abstract',
+        'keywords',
+        'research_interests',
+        'funding_source',
+        'funding_organization',
         'authors',
         'venue',
         'publisher',
@@ -49,6 +53,7 @@ class ResearchSubmission extends Model
         return [
             'status' => SubmissionStatus::class,
             'authors' => 'array',
+            'research_interests' => 'array',
             'publication_date' => 'date',
             'claimed_points' => 'decimal:2',
             'submitted_at' => 'datetime',

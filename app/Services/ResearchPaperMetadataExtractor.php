@@ -65,6 +65,23 @@ class ResearchPaperMetadataExtractor
             $fields['abstract'] = $abstract;
         }
 
+        foreach ($lines as $line) {
+            if (preg_match('/^(?:keywords?|key\s+words?)\s*[:\-]\s*(.+)$/iu', $line, $matches) === 1) {
+                $keywords = collect(preg_split('/\s*[,;]\s*/u', $matches[1]) ?: [])
+                    ->map(fn (string $keyword): string => trim($keyword, " \t\n\r\0\x0B."))
+                    ->filter()
+                    ->unique()
+                    ->values()
+                    ->all();
+
+                if ($keywords !== []) {
+                    $fields['keywords'] = $keywords;
+                }
+
+                break;
+            }
+        }
+
         if (preg_match('/\b(10\.\d{4,9}\/[\-._;()\/:A-Z0-9]+)\b/i', $text, $matches) === 1) {
             $fields['doi'] = rtrim($matches[1], '.,;:)');
         }

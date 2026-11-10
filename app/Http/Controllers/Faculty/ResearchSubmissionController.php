@@ -142,28 +142,36 @@ class ResearchSubmissionController extends Controller
 
         $points = $this->configuredPoints($data['research_type']);
 
-        $submission = DB::transaction(function () use ($request, $user, $data, $points) {
-            $submission = ResearchSubmission::query()->create([
-                ...collect($data)->except(['attachments', 'submit_now', 'author_details', 'claimed_points', 'sdgs', 'research_agendas'])->all(),
-                'faculty_id' => $user->id,
-                'college_id' => $user->college_id,
-                'department_id' => $user->department_id,
-                'status' => SubmissionStatus::Draft,
-                'claimed_points' => $points,
-                'normalized_title' => ResearchSubmission::normalizeTitle($data['title']),
-            ]);
+        $storedFiles = [];
+        $obsoleteFiles = [];
+        try {
+            $submission = DB::transaction(function () use ($request, $user, $data, $points, &$storedFiles, &$obsoleteFiles) {
+                $submission = ResearchSubmission::query()->create([
+                    ...collect($data)->except(['attachments', 'attachment_requirements', 'submit_now', 'author_details', 'claimed_points', 'sdgs', 'research_agendas'])->all(),
+                    'faculty_id' => $user->id,
+                    'college_id' => $user->college_id,
+                    'department_id' => $user->department_id,
+                    'status' => SubmissionStatus::Draft,
+                    'claimed_points' => $points,
+                    'normalized_title' => ResearchSubmission::normalizeTitle($data['title']),
+                ]);
 
-            $this->authorService->sync($submission, $data['author_details'], $points);
-            $submission->sdgs()->sync($data['sdgs'] ?? []);
-            $submission->researchAgendas()->sync($data['research_agendas'] ?? []);
-            $this->storeAttachments($request, $submission);
+                $this->authorService->sync($submission, $data['author_details'], $points, $storedFiles, $obsoleteFiles);
+                $submission->sdgs()->sync($data['sdgs'] ?? []);
+                $submission->researchAgendas()->sync($data['research_agendas'] ?? []);
+                $this->storeAttachments($request, $submission, $storedFiles);
 
-            if ($request->boolean('submit_now')) {
-                $this->workflow->submit($submission, $user, 'Submitted upon creation.');
-            }
+                if ($request->boolean('submit_now')) {
+                    $this->workflow->submit($submission, $user, 'Submitted upon creation.');
+                }
 
-            return $submission;
-        });
+                return $submission;
+            });
+        } catch (\Throwable $exception) {
+            $this->deleteFiles($storedFiles);
+            throw $exception;
+        }
+        $this->deleteFiles($obsoleteFiles);
 
         return redirect()
             ->route('faculty.submissions.show', $submission)
@@ -197,6 +205,7 @@ class ResearchSubmissionController extends Controller
                 'update' => request()->user()->can('update', $submission),
                 'submit' => request()->user()->can('submit', $submission),
                 'delete' => request()->user()->can('delete', $submission),
+                'viewCertificate' => request()->user()->can('viewCertificate', $submission),
                 'viewAuthorizations' => request()->user()->isAdmin()
                     || (request()->user()->isCoordinator()
                         && request()->user()->department_id !== null
@@ -222,23 +231,46 @@ class ResearchSubmissionController extends Controller
     {
         $data = $request->validated();
 
+        if (array_key_exists('funding_source', $data) && ! array_key_exists('funding_organization', $data)) {
+            $data['funding_organization'] = null;
+        }
+
         $points = $this->configuredPoints($data['research_type']);
 
-        DB::transaction(function () use ($request, $submission, $data, $points) {
-            $submission->update([
-                ...collect($data)->except(['attachments', 'submit_now', 'author_details', 'claimed_points', 'sdgs', 'research_agendas'])->all(),
-                'claimed_points' => $points,
-                'normalized_title' => ResearchSubmission::normalizeTitle($data['title']),
-            ]);
-            $this->authorService->sync($submission, $data['author_details'], $points);
-            $submission->sdgs()->sync($data['sdgs'] ?? []);
-            $submission->researchAgendas()->sync($data['research_agendas'] ?? []);
-            $this->storeAttachments($request, $submission);
+        $storedFiles = [];
+        $obsoleteFiles = [];
+        try {
+            DB::transaction(function () use ($request, $submission, $data, $points, &$storedFiles, &$obsoleteFiles) {
+                $existingMappings = $data['existing_attachment_requirements'] ?? [];
+                $attachmentIds = $submission->attachments()->pluck('id')->map(fn ($id) => (string) $id)->all();
+                if (array_diff(array_keys($existingMappings), $attachmentIds)) {
+                    throw ValidationException::withMessages(['evidence' => 'An attachment does not belong to this submission.']);
+                }
+                if ($submission->research_type !== $data['research_type']) {
+                    $submission->attachments()->update(['research_evidence_requirement_id' => null]);
+                }
+                foreach ($existingMappings as $attachmentId => $requirementId) {
+                    $submission->attachments()->whereKey($attachmentId)->update(['research_evidence_requirement_id' => $requirementId ?: null]);
+                }
+                $submission->update([
+                    ...collect($data)->except(['attachments', 'attachment_requirements', 'existing_attachment_requirements', 'submit_now', 'author_details', 'claimed_points', 'sdgs', 'research_agendas'])->all(),
+                    'claimed_points' => $points,
+                    'normalized_title' => ResearchSubmission::normalizeTitle($data['title']),
+                ]);
+                $this->authorService->sync($submission, $data['author_details'], $points, $storedFiles, $obsoleteFiles);
+                $submission->sdgs()->sync($data['sdgs'] ?? []);
+                $submission->researchAgendas()->sync($data['research_agendas'] ?? []);
+                $this->storeAttachments($request, $submission, $storedFiles);
 
-            if ($request->boolean('submit_now')) {
-                $this->workflow->submit($submission->fresh(), $request->user(), 'Submitted after revision.');
-            }
-        });
+                if ($request->boolean('submit_now')) {
+                    $this->workflow->submit($submission->fresh(), $request->user(), 'Submitted after revision.');
+                }
+            });
+        } catch (\Throwable $exception) {
+            $this->deleteFiles($storedFiles);
+            throw $exception;
+        }
+        $this->deleteFiles($obsoleteFiles);
 
         return redirect()
             ->route('faculty.submissions.show', $submission)
@@ -290,13 +322,14 @@ class ResearchSubmissionController extends Controller
             ],
             'academicYears' => AcademicYear::query()->active()->orderByDesc('starts_on')->get(['id', 'name', 'is_current']),
             'researchTypes' => ResearchType::active()->orderBy('sort_order')->orderBy('name')
-                ->get(['slug', 'name', 'category', 'has_authors'])
-                ->map(fn (ResearchType $type): array => ['value' => $type->slug, 'label' => $type->name, 'group' => $type->category ?? 'Other', 'has_authors' => $type->has_authors])
+                ->with(['evidenceRequirements' => fn ($query) => $query->where('is_active', true)->orderBy('id')])
+                ->get(['id', 'slug', 'name', 'category', 'has_authors'])
+                ->map(fn (ResearchType $type): array => ['value' => $type->slug, 'label' => $type->name, 'group' => $type->category ?? 'Other', 'has_authors' => $type->has_authors, 'requirements' => $type->evidenceRequirements])
                 ->all(),
             'researchTypePoints' => ResearchTypePointSetting::query()->pluck('points_per_output', 'research_type'),
             'sdgs' => Sdg::query()->where('is_active', true)->orderBy('number')->get(['id', 'number', 'name', 'image_path']),
             'researchAgendas' => ResearchAgenda::query()->where('is_active', true)->orderBy('name')->get(['id', 'name', 'description', 'image_path']),
-            'currentFaculty' => $user->only(['id', 'name', 'email', 'institutional_profile_url']),
+            'currentFaculty' => $user->only(['id', 'name', 'email', 'institutional_profile_url', 'research_interests']),
             'facultyDirectory' => User::query()
                 ->where('role', UserRole::Faculty)
                 ->where('is_active', true)
@@ -332,25 +365,34 @@ class ResearchSubmissionController extends Controller
         return (float) $setting->points_per_output;
     }
 
-    private function storeAttachments(Request $request, ResearchSubmission $submission): void
+    private function storeAttachments(Request $request, ResearchSubmission $submission, array &$storedFiles): void
     {
         if (! $request->hasFile('attachments')) {
             return;
         }
 
-        foreach ($request->file('attachments') as $file) {
-            $path = $file->store('research-attachments/'.$submission->uuid, 'public');
+        foreach ($request->file('attachments') as $index => $file) {
+            $path = $file->store('research-attachments/'.$submission->uuid, 'local');
+            $storedFiles[] = ['local', $path];
 
             SubmissionAttachment::query()->create([
                 'research_submission_id' => $submission->id,
-                'disk' => 'public',
+                'disk' => 'local',
                 'path' => $path,
                 'original_name' => $file->getClientOriginalName(),
                 'mime_type' => $file->getClientMimeType(),
                 'size' => $file->getSize(),
                 'category' => 'evidence',
                 'uploaded_by' => $request->user()->id,
+                'research_evidence_requirement_id' => $request->input("attachment_requirements.$index") ?: null,
             ]);
+        }
+    }
+
+    private function deleteFiles(array $files): void
+    {
+        foreach ($files as [$disk, $path]) {
+            Storage::disk($disk)->delete($path);
         }
     }
 }

@@ -11,9 +11,9 @@ const logoUrl = computed(() => (page.props.app as { logo_url?: string | null })?
     <div class="flex min-h-screen flex-col items-center justify-center bg-[radial-gradient(circle_at_top,_#fff9e6,_transparent_30%),linear-gradient(180deg,#ffffff_0%,#eaf1fb_100%)] px-4 py-10">
         <div class="mb-6 text-center">
             <Link href="/" class="inline-flex flex-col items-center gap-3">
-                <div class="flex h-16 w-16 items-center justify-center rounded-2xl bg-ori-blue-700 text-ori-yellow-400 shadow-soft">
-                    <img v-if="logoUrl" :src="logoUrl" alt="Office of Research and Innovation logo" class="h-16 w-16 rounded-2xl bg-white p-1 object-contain" />
-                    <ApplicationLogo v-else class="h-9 w-9 fill-current" />
+                <div  class="flex size-16 shrink-0 items-center justify-center overflow-hidden rounded-full bg-white shadow-soft">
+                    <img v-if="logoUrl" :src="logoUrl" alt="Office of Research and Innovation logo"  class="block size-full rounded-full bg-white object-contain p-1" />
+                    <ApplicationLogo v-else class="size-9 fill-current" />
                 </div>
                 <div>
                     <p class="font-display text-2xl font-semibold text-ori-blue-900">LNU ORI System</p>

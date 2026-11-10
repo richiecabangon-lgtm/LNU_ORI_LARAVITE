@@ -25,12 +25,14 @@ use Illuminate\Notifications\Notifiable;
     'academic_rank',
     'orcid_url',
     'google_scholar_url',
+    'scopus_url',
     'institutional_profile_url',
+    'research_interests',
     'profile_photo_path',
     'theme_preference',
     'is_active',
 ])]
-#[Hidden(['password', 'remember_token'])]
+#[Hidden(['password', 'remember_token', 'research_interests'])]
 class User extends Authenticatable
 {
     /** @use HasFactory<UserFactory> */
@@ -43,6 +45,7 @@ class User extends Authenticatable
             'password' => 'hashed',
             'role' => UserRole::class,
             'is_active' => 'boolean',
+            'research_interests' => 'array',
         ];
     }
 

@@ -2,6 +2,8 @@
 
 use App\Http\Controllers\Admin\AchievementTierController;
 use App\Http\Controllers\Admin\ApprovalController;
+use App\Http\Controllers\Admin\CertificationSettingController;
+use App\Http\Controllers\Admin\FpesArchiveController;
 use App\Http\Controllers\Admin\NewsPostController;
 use App\Http\Controllers\Admin\OrganizationController;
 use App\Http\Controllers\Admin\ResearchTypeController;
@@ -14,6 +16,7 @@ use App\Http\Controllers\Faculty\ResearchSubmissionController;
 use App\Http\Controllers\NewsController;
 use App\Http\Controllers\ProfileController;
 use App\Http\Controllers\ReportController;
+use App\Http\Controllers\ResearchCertificateController;
 use App\Http\Controllers\ResearchProfileController;
 use App\Http\Controllers\SubmissionAttachmentController;
 use App\Http\Controllers\UserNotificationController;
@@ -49,6 +52,8 @@ Route::middleware(['auth', 'verified'])->group(function () {
     Route::post('/notifications/read-all', [UserNotificationController::class, 'markAllRead'])->name('notifications.read-all');
 
     Route::middleware('role:faculty')->prefix('faculty')->name('faculty.')->group(function () {
+        Route::get('submissions/{submission}/certificate', [ResearchCertificateController::class, 'show'])->name('certificates.show');
+        Route::get('submissions/{submission}/certificate/download', [ResearchCertificateController::class, 'show'])->name('certificates.download');
         Route::post('submissions/extract-metadata', [ResearchSubmissionController::class, 'extractMetadata'])
             ->middleware('throttle:10,1')
             ->name('submissions.extract-metadata');
@@ -64,6 +69,8 @@ Route::middleware(['auth', 'verified'])->group(function () {
     });
 
     Route::middleware('role:admin')->prefix('admin')->name('admin.')->group(function () {
+        Route::get('certification/settings', [CertificationSettingController::class, 'edit'])->name('certification.settings');
+        Route::put('certification/settings', [CertificationSettingController::class, 'update'])->name('certification.settings.update');
         Route::get('achievement-tiers', [AchievementTierController::class, 'index'])->name('achievement-tiers.index');
         Route::put('achievement-tiers', [AchievementTierController::class, 'update'])->name('achievement-tiers.update');
         Route::resource('news', NewsPostController::class)->except('show');
@@ -88,6 +95,10 @@ Route::middleware(['auth', 'verified'])->group(function () {
         Route::put('research-type-points', [ResearchTypePointController::class, 'update'])->name('research-type-points.update');
         Route::get('reports/settings', [ReportController::class, 'settings'])->name('reports.settings');
         Route::put('reports/settings', [ReportController::class, 'updateSettings'])->name('reports.settings.update');
+        Route::get('reports/fpes/export', [ReportController::class, 'exportFpes'])->name('reports.fpes.export');
+        Route::post('reports/fpes/archives/preview', [FpesArchiveController::class, 'preview'])->name('reports.fpes.archives.preview');
+        Route::post('reports/fpes/archives', [FpesArchiveController::class, 'store'])->name('reports.fpes.archives.store');
+        Route::post('reports/fpes/archives/{archive}/restore', [FpesArchiveController::class, 'restore'])->name('reports.fpes.archives.restore');
         Route::get('approvals', [ApprovalController::class, 'index'])->name('approvals.index');
         Route::get('approvals/{submission}', [ApprovalController::class, 'show'])->name('approvals.show');
         Route::post('approvals/{submission}', [ApprovalController::class, 'store'])->name('approvals.store');

@@ -8,7 +8,9 @@ use App\Models\ResearchType;
 use App\Models\ResearchTypePointSetting;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Str;
+use Illuminate\Validation\ValidationException;
 use Inertia\Inertia;
 use Inertia\Response;
 
@@ -19,7 +21,7 @@ class ResearchTypeController extends Controller
         abort_unless($request->user()->isAdmin(), 403);
 
         return Inertia::render('Admin/ResearchTypes/Index', [
-            'researchTypes' => ResearchType::query()->withTrashed()->with('pointSetting')->orderBy('sort_order')->orderBy('name')->get()
+            'researchTypes' => ResearchType::query()->withTrashed()->with(['pointSetting', 'evidenceRequirements' => fn ($query) => $query->where('is_active', true)->orderBy('id')])->orderBy('sort_order')->orderBy('name')->get()
                 ->map(fn (ResearchType $type): array => [
                     'id' => $type->id,
                     'slug' => $type->slug,
@@ -30,6 +32,7 @@ class ResearchTypeController extends Controller
                     'points' => (float) ($type->pointSetting?->points_per_output ?? 0),
                     'is_active' => $type->is_active && $type->deleted_at === null,
                     'submission_count' => ResearchSubmission::query()->where('research_type', $type->slug)->count(),
+                    'requirements' => $type->evidenceRequirements,
                 ]),
         ]);
     }
@@ -84,22 +87,48 @@ class ResearchTypeController extends Controller
             'has_authors' => ['sometimes', 'boolean'],
             'points' => ['required', 'numeric', 'min:0', 'max:999999.99'],
             'is_active' => ['required', 'boolean'],
+            'requirements' => ['sometimes', 'array', 'max:50'],
+            'requirements.*.id' => ['nullable', 'integer', 'distinct'],
+            'requirements.*.name' => ['required', 'string', 'max:255'],
+            'requirements.*.is_required' => ['required', 'boolean'],
         ]);
 
-        $researchType->update([
-            'name' => $data['name'],
-            'description' => $data['description'] ?? null,
-            'category' => $data['category'] ?? null,
-            'has_authors' => $data['has_authors'] ?? $researchType->has_authors,
-            'is_active' => $data['is_active'],
-            'updated_by' => $request->user()->id,
-            'deleted_at' => null,
-        ]);
+        DB::transaction(function () use ($researchType, $data, $request) {
+            $researchType = ResearchType::withTrashed()->lockForUpdate()->findOrFail($researchType->id);
+            if (array_key_exists('requirements', $data)) {
+                $existingIds = $researchType->evidenceRequirements()->where('is_active', true)->pluck('id');
+                $submittedIds = collect($data['requirements'])->pluck('id')->filter();
+                if ($submittedIds->diff($existingIds)->isNotEmpty()) {
+                    throw ValidationException::withMessages(['requirements' => 'A requirement does not belong to this research type.']);
+                }
+                $researchType->evidenceRequirements()->whereNotIn('id', $submittedIds)->update(['is_active' => false]);
+                foreach ($data['requirements'] as $requirement) {
+                    if (! empty($requirement['id'])) {
+                        $researchType->evidenceRequirements()->whereKey($requirement['id'])->update([
+                            'name' => $requirement['name'], 'is_required' => $requirement['is_required'],
+                        ]);
+                    } else {
+                        $researchType->evidenceRequirements()->create([
+                            'name' => $requirement['name'], 'is_required' => $requirement['is_required'],
+                        ]);
+                    }
+                }
+            }
+            $researchType->update([
+                'name' => $data['name'],
+                'description' => $data['description'] ?? null,
+                'category' => $data['category'] ?? null,
+                'has_authors' => $data['has_authors'] ?? $researchType->has_authors,
+                'is_active' => $data['is_active'],
+                'updated_by' => $request->user()->id,
+                'deleted_at' => null,
+            ]);
 
-        ResearchTypePointSetting::query()->updateOrCreate(
-            ['research_type' => $researchType->slug],
-            ['points_per_output' => $data['points'], 'updated_by' => $request->user()->id],
-        );
+            ResearchTypePointSetting::query()->updateOrCreate(
+                ['research_type' => $researchType->slug],
+                ['points_per_output' => $data['points'], 'updated_by' => $request->user()->id],
+            );
+        });
 
         return back()->with('success', 'Research involvement type updated.');
     }

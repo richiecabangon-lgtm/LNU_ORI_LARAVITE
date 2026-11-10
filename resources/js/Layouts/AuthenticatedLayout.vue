@@ -68,6 +68,7 @@ const adminNavigationGroups: { label: string; items: NavigationItem[] }[] = [
         items: [
             { label: 'FPES Reports', route: 'reports.fpes', match: 'reports.fpes' },
             { label: 'Report Setup', route: 'admin.reports.settings', match: 'admin.reports.*' },
+            { label: 'Certificate Setup', route: 'admin.certification.settings', match: 'admin.certification.*' },
         ],
     },
 ];

@@ -4,6 +4,7 @@ namespace App\Policies;
 
 use App\Enums\SubmissionStatus;
 use App\Enums\UserRole;
+use App\Models\CertificationSetting;
 use App\Models\ResearchSubmission;
 use App\Models\User;
 
@@ -35,6 +36,16 @@ class ResearchSubmissionPolicy
     public function create(User $user): bool
     {
         return $user->isFaculty() && $user->is_active;
+    }
+
+    public function viewCertificate(User $user, ResearchSubmission $submission): bool
+    {
+        return $user->is_active
+            && $user->isFaculty()
+            && $submission->status === SubmissionStatus::Approved
+            && $this->view($user, $submission)
+            && ($submission->research_type === 'published_research_published_individual_research_scopus_indexed_journal'
+                || (CertificationSetting::query()->find(1)?->allow_non_scopus ?? false));
     }
 
     public function update(User $user, ResearchSubmission $submission): bool

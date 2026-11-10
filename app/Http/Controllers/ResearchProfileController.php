@@ -103,7 +103,8 @@ class ResearchProfileController extends Controller
                 ];
             });
 
-        $facultyData = $user->only(['id', 'name', 'employee_id', 'designation', 'academic_rank', 'orcid_url', 'google_scholar_url', 'institutional_profile_url']);
+        $facultyData = $user->only(['id', 'name', 'employee_id', 'designation', 'academic_rank', 'orcid_url', 'google_scholar_url', 'scopus_url', 'institutional_profile_url']);
+        $facultyData['research_interests'] = $user->research_interests ?? [];
         $facultyData['profile_photo_url'] = $user->profile_photo_url;
         $canSeeContact = $request->user()->is($user) || $request->user()->isAdmin();
 

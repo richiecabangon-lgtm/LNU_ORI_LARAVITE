@@ -35,6 +35,7 @@ class HandleInertiaRequests extends Middleware
                     'academic_rank' => $user->academic_rank,
                     'orcid_url' => $user->orcid_url,
                     'google_scholar_url' => $user->google_scholar_url,
+                    'scopus_url' => $user->scopus_url,
                     'institutional_profile_url' => $user->institutional_profile_url,
                     'profile_photo_url' => $user->profile_photo_url,
                     'theme_preference' => $user->theme_preference ?? 'light',

@@ -20,8 +20,9 @@ PAPER);
         ->toHaveKey('authors', ['Maria Santos', 'Jose Cruz'])
         ->toHaveKey('doi', '10.1234/example.2024.10')
         ->toHaveKey('publication_date', '2024-04-12')
+        ->toHaveKey('keywords', ['community learning', 'education'])
         ->toHaveKey('abstract')
-        ->and($result['extracted_fields'])->toHaveCount(5);
+        ->and($result['extracted_fields'])->toHaveCount(6);
 });
 
 it('only extracts author names from the title block instead of citation authors', function () {
@@ -42,6 +43,16 @@ PAPER);
 
     expect($result['fields']['authors'])
         ->toBe(['Maria Santos', 'Jose Cruz']);
+});
+
+it('extracts labeled key words without inventing keywords when none are labeled', function () {
+    $extractor = new ResearchPaperMetadataExtractor;
+
+    $withKeywords = $extractor->parseText("A Study of Rural Education\nKey words - learning; schools; learning.");
+    $withoutKeywords = $extractor->parseText("A Study of Rural Education\nThis paper discusses learning and schools.");
+
+    expect($withKeywords['fields']['keywords'])->toBe(['learning', 'schools'])
+        ->and($withoutKeywords['fields'])->not->toHaveKey('keywords');
 });
 
 it('extracts names from an authors label directly beneath the title', function () {

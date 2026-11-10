@@ -10,7 +10,7 @@ defineProps<{
     mustVerifyEmail?: boolean;
     status?: string;
     profilePhotoUrl: string | null;
-    user: { theme_preference?: 'light' | 'dark' };
+    user: { theme_preference?: 'light' | 'dark'; research_interests: string[] | null };
 }>();
 </script>
 
@@ -34,6 +34,7 @@ defineProps<{
                     <UpdateProfileInformationForm
                         :must-verify-email="mustVerifyEmail"
                         :status="status"
+                        :research-interests="user.research_interests"
                         class="max-w-xl"
                     />
                 </div>

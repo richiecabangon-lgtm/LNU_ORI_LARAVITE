@@ -3,11 +3,13 @@ import InputError from '@/Components/InputError.vue';
 import InputLabel from '@/Components/InputLabel.vue';
 import PrimaryButton from '@/Components/PrimaryButton.vue';
 import TextInput from '@/Components/TextInput.vue';
+import ResearchInterestsInput from '@/Components/ORI/ResearchInterestsInput.vue';
 import { Link, useForm, usePage } from '@inertiajs/vue3';
 
-defineProps<{
+const props = defineProps<{
     mustVerifyEmail?: Boolean;
     status?: String;
+    researchInterests: string[] | null;
 }>();
 
 const user = usePage().props.auth.user;
@@ -18,8 +20,17 @@ const form = useForm({
     academic_rank: user.academic_rank ?? '',
     orcid_url: user.orcid_url ?? '',
     google_scholar_url: user.google_scholar_url ?? '',
+    scopus_url: user.scopus_url ?? '',
     institutional_profile_url: user.institutional_profile_url ?? '',
+    research_interests: [...(props.researchInterests ?? [])],
 });
+
+function saveProfile() {
+    form.transform(({ research_interests, ...data }) => ({
+        ...data,
+        ...(user.role === 'faculty' ? { research_interests: research_interests.map((interest) => interest.trim()).filter(Boolean) } : {}),
+    })).patch(route('profile.update'));
+}
 </script>
 
 <template>
@@ -35,7 +46,7 @@ const form = useForm({
         </header>
 
         <form
-            @submit.prevent="form.patch(route('profile.update'))"
+            @submit.prevent="saveProfile"
             class="mt-6 space-y-6"
         >
             <div>
@@ -95,10 +106,18 @@ const form = useForm({
             </div>
 
             <div>
+                <InputLabel for="scopus_url" value="Scopus author profile" />
+                <TextInput id="scopus_url" type="url" class="mt-1 block w-full" v-model="form.scopus_url" placeholder="https://www.scopus.com/authid/detail.uri?authorId=..." />
+                <InputError class="mt-2" :message="form.errors.scopus_url" />
+            </div>
+
+            <div>
                 <InputLabel for="institutional_profile_url" value="Institutional profile" />
                 <TextInput id="institutional_profile_url" type="url" class="mt-1 block w-full" v-model="form.institutional_profile_url" placeholder="https://www.lnu.edu.ph/..." />
                 <InputError class="mt-2" :message="form.errors.institutional_profile_url" />
             </div>
+
+            <ResearchInterestsInput v-if="user.role === 'faculty'" v-model="form.research_interests" :errors="form.errors" id-prefix="profile-interest" />
 
             <div v-if="mustVerifyEmail && user.email_verified_at === null">
                 <p class="mt-2 text-sm text-gray-800">

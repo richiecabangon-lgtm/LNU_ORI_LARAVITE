@@ -24,7 +24,7 @@ class ProfileController extends Controller
             'status' => session('status'),
             'user' => $request->user()->only([
                 'id', 'name', 'email', 'email_verified_at', 'academic_rank', 'orcid_url',
-                'google_scholar_url', 'institutional_profile_url', 'profile_photo_path', 'theme_preference',
+                'google_scholar_url', 'scopus_url', 'institutional_profile_url', 'profile_photo_path', 'theme_preference', 'research_interests',
             ]),
             'profilePhotoUrl' => $request->user()->profile_photo_url,
         ]);

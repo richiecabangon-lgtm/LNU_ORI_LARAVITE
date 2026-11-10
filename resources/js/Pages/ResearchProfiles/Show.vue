@@ -7,7 +7,7 @@ import { computed } from 'vue';
 
 type ResearchItem = { id: number; uuid: string; reference_code: string; title: string; research_type: string; abstract: string | null; venue: string | null; doi: string | null; publication_date: string | null; status: string; faculty_points: number; is_submitter: boolean; college: string | null; department: string | null; sdgs: Array<{ number: number; name: string; image_url: string | null }>; research_agendas: Array<{ name: string; image_url: string | null }> };
 const props = defineProps<{
-    faculty: { id: number; name: string; email: string; employee_id: string | null; designation: string | null; academic_rank: string | null; profile_photo_url: string | null; orcid_url: string | null; google_scholar_url: string | null; institutional_profile_url: string | null };
+    faculty: { id: number; name: string; email: string; employee_id: string | null; designation: string | null; academic_rank: string | null; profile_photo_url: string | null; orcid_url: string | null; google_scholar_url: string | null; scopus_url: string | null; institutional_profile_url: string | null; research_interests: string[] };
     college: string | null;
     department: string | null;
     submissions: ResearchItem[];
@@ -17,6 +17,7 @@ const totalPoints = computed(() => props.submissions.reduce((total, item) => tot
 const externalProfiles = computed(() => [
     { label: 'ORCID', url: props.faculty.orcid_url, detail: 'Persistent researcher identifier' },
     { label: 'Google Scholar', url: props.faculty.google_scholar_url, detail: 'Publications and citation profile' },
+    { label: 'Scopus', url: props.faculty.scopus_url, detail: 'Author profile' },
     { label: 'Institutional profile', url: props.faculty.institutional_profile_url, detail: 'Leyte Normal University profile' },
 ].filter((profile): profile is { label: string; url: string; detail: string } => Boolean(profile.url)));
 
@@ -41,6 +42,7 @@ function displayProfileUrl(value: string): string {
                 <div v-if="faculty.designation"><dt class="text-xs font-semibold uppercase text-ori-blue-400">Designation</dt><dd class="mt-1 text-ori-blue-900">{{ faculty.designation }}</dd></div>
                 <div v-if="faculty.employee_id"><dt class="text-xs font-semibold uppercase text-ori-blue-400">Employee ID</dt><dd class="mt-1 text-ori-blue-900">{{ faculty.employee_id }}</dd></div>
                 <div v-if="canSeeContact"><dt class="text-xs font-semibold uppercase text-ori-blue-400">Email</dt><dd class="mt-1 text-ori-blue-900">{{ faculty.email }}</dd></div>
+                <div class="sm:col-span-2"><dt class="text-xs font-semibold uppercase text-ori-blue-400">Research interests</dt><dd class="mt-1 break-words text-ori-blue-900">{{ faculty.research_interests.join(', ') || 'Not specified' }}</dd></div>
             </dl>
         </section>
         <section v-if="externalProfiles.length" class="border-b border-ori-blue-100 py-5" aria-labelledby="researcher-profiles-heading">

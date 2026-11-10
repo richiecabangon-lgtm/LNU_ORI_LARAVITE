@@ -4,11 +4,13 @@ import PageHeader from '@/Components/ORI/PageHeader.vue';
 import StatusBadge from '@/Components/ORI/StatusBadge.vue';
 import AttachmentViewer from '@/Components/ORI/AttachmentViewer.vue';
 import AuthorizationProofLink from '@/Components/ORI/AuthorizationProofLink.vue';
-import { Head, Link, router } from '@inertiajs/vue3';
+import EvidenceHistory from '@/Components/ORI/EvidenceHistory.vue';
+import { formatFundingSource } from '@/Utils/fundingSource';
+import { Head, Link, router, usePage } from '@inertiajs/vue3';
 
 const props = defineProps<{
     submission: any;
-    can: { update: boolean; submit: boolean; delete: boolean; viewAuthorizations: boolean };
+    can: { update: boolean; submit: boolean; delete: boolean; viewAuthorizations: boolean; viewCertificate: boolean };
 }>();
 
 type SdgItem = { number: number; name: string };
@@ -41,6 +43,8 @@ const destroy = () => {
         <PageHeader :title="submission.title" :description="submission.reference_code">
             <template #actions>
                 <StatusBadge :status="submission.status" />
+                <a v-if="can.viewCertificate" :href="route('faculty.certificates.show', submission.uuid)" target="_blank" rel="noopener" class="ori-btn-ghost">View certificate</a>
+                <a v-if="can.viewCertificate" :href="route('faculty.certificates.download', submission.uuid)" class="ori-btn-ghost">Download HTML</a>
                 <Link
                     v-if="can.update"
                     :href="route('faculty.submissions.edit', submission.uuid)"
@@ -56,6 +60,8 @@ const destroy = () => {
                 </button>
             </template>
         </PageHeader>
+
+        <div v-if="usePage().props.errors.evidence" role="alert" class="mb-4 border border-rose-200 bg-rose-50 px-4 py-3 text-sm text-rose-800">{{ usePage().props.errors.evidence }} <Link v-if="can.update" :href="route('faculty.submissions.edit', submission.uuid)" class="font-semibold underline">Edit evidence</Link></div>
 
         <div class="grid gap-6 lg:grid-cols-3">
             <section class="ori-card space-y-4 p-6 lg:col-span-2">
@@ -77,6 +83,14 @@ const destroy = () => {
                 </div>
 
                 <dl class="grid gap-4 sm:grid-cols-2">
+                    <div class="sm:col-span-2">
+                        <dt class="text-xs font-semibold uppercase tracking-wide text-ori-blue-400">Research interests</dt>
+                        <dd class="mt-1 break-words text-sm text-ori-blue-900">{{ submission.research_interests?.join(', ') || '—' }}</dd>
+                    </div>
+                    <div>
+                        <dt class="text-xs font-semibold uppercase tracking-wide text-ori-blue-400">Funding source</dt>
+                        <dd class="mt-1 break-words text-sm text-ori-blue-900">{{ formatFundingSource(submission.funding_source, submission.funding_organization) }}</dd>
+                    </div>
                     <div v-if="submission.has_authors !== false">
                         <dt class="text-xs font-semibold uppercase tracking-wide text-ori-blue-400">Authors</dt>
                         <dd class="mt-1 text-sm text-ori-blue-900">{{ submission.authors?.join(', ') }}</dd>
@@ -111,7 +125,13 @@ const destroy = () => {
                     </p>
                 </div>
 
+                <div v-if="submission.keywords">
+                    <h3 class="text-sm font-semibold text-ori-blue-800">Keywords</h3>
+                    <p class="mt-2 text-sm text-ori-blue-700">{{ submission.keywords }}</p>
+                </div>
+
                 <AttachmentViewer v-if="submission.attachments?.length" :attachments="submission.attachments" />
+                <EvidenceHistory :histories="submission.status_histories ?? []" />
             </section>
 
             <aside class="space-y-6">

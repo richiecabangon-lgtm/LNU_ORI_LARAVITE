@@ -5,6 +5,8 @@ import PageHeader from '@/Components/ORI/PageHeader.vue';
 import StatusBadge from '@/Components/ORI/StatusBadge.vue';
 import AttachmentViewer from '@/Components/ORI/AttachmentViewer.vue';
 import AuthorizationProofLink from '@/Components/ORI/AuthorizationProofLink.vue';
+import EvidenceHistory from '@/Components/ORI/EvidenceHistory.vue';
+import { formatFundingSource } from '@/Utils/fundingSource';
 import { Head, Link, useForm } from '@inertiajs/vue3';
 
 const props = defineProps<{
@@ -57,6 +59,14 @@ const submit = () => {
                 </div>
 
                 <dl class="grid gap-4 sm:grid-cols-2 text-sm">
+                    <div class="sm:col-span-2">
+                        <dt class="text-ori-blue-400">Research interests</dt>
+                        <dd class="break-words font-medium">{{ submission.research_interests?.join(', ') || '—' }}</dd>
+                    </div>
+                    <div>
+                        <dt class="text-ori-blue-400">Funding source</dt>
+                        <dd class="break-words font-medium">{{ formatFundingSource(submission.funding_source, submission.funding_organization) }}</dd>
+                    </div>
                     <div>
                         <dt class="text-ori-blue-400">Type</dt>
                         <dd class="font-medium">{{ submission.research_type_label }}</dd>
@@ -89,6 +99,7 @@ const submit = () => {
                     <div v-if="submission.research_agendas?.length"><strong>Research agendas</strong><div class="mt-2 flex flex-wrap gap-2"><span v-for="item in submission.research_agendas" :key="item.id" class="inline-flex items-center gap-2 border border-ori-blue-100 px-2 py-1"><img v-if="item.image_url" :src="item.image_url" :alt="`${item.name} image`" class="h-8 w-8 rounded object-cover" /><span>{{ item.name }}</span></span></div></div>
                 </div>
                 <AttachmentViewer v-if="submission.attachments?.length" :attachments="submission.attachments" title="Evidence files" />
+                <EvidenceHistory :histories="submission.status_histories ?? []" />
             </section>
 
             <section class="ori-card p-6 lg:col-span-2">

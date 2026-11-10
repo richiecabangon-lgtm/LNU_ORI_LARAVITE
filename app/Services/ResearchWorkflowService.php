@@ -12,6 +12,7 @@ use App\Models\StatusHistory;
 use App\Models\User;
 use App\Notifications\ResearchWorkflowNotification;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Validation\ValidationException;
 use InvalidArgumentException;
 
 class ResearchWorkflowService
@@ -23,14 +24,37 @@ class ResearchWorkflowService
             SubmissionStatus::RevisionRequested,
         ]);
 
-        $updated = $this->transition(
-            submission: $submission,
-            actor: $actor,
-            to: SubmissionStatus::Submitted,
-            action: 'submitted',
-            notes: $notes,
-            attributes: ['submitted_at' => now()],
-        );
+        $updated = DB::transaction(function () use ($submission, $actor, $notes) {
+            $type = $submission->researchType()->lockForUpdate()->firstOrFail();
+            $requirements = $type->evidenceRequirements()->where('is_active', true)->orderBy('id')->get();
+            $attachments = $submission->attachments()->get();
+            $missing = $requirements->filter(fn ($requirement) => $requirement->is_required
+                && ! $attachments->contains('research_evidence_requirement_id', $requirement->id));
+
+            if ($missing->isNotEmpty()) {
+                throw ValidationException::withMessages([
+                    'evidence' => 'Missing required evidence: '.$missing->pluck('name')->join(', ').'.',
+                ]);
+            }
+
+            $snapshot = $requirements->map(fn ($requirement) => [
+                'id' => $requirement->id,
+                'name' => $requirement->name,
+                'is_required' => $requirement->is_required,
+                'attachments' => $attachments->where('research_evidence_requirement_id', $requirement->id)
+                    ->map(fn ($attachment) => ['id' => $attachment->id, 'name' => $attachment->original_name])->values()->all(),
+            ])->all();
+
+            return $this->transition(
+                submission: $submission,
+                actor: $actor,
+                to: SubmissionStatus::Submitted,
+                action: 'submitted',
+                notes: $notes,
+                attributes: ['submitted_at' => now()],
+                meta: ['evidence_requirements' => $snapshot],
+            );
+        });
 
         User::query()->where('role', UserRole::Coordinator)
             ->where('is_active', true)

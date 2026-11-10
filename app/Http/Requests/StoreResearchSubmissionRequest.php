@@ -4,6 +4,7 @@ namespace App\Http\Requests;
 
 use App\Http\Requests\Concerns\CreditsSoleParticipant;
 use App\Models\ResearchSubmission;
+use App\Models\ResearchType;
 use Illuminate\Foundation\Http\FormRequest;
 use Illuminate\Validation\Rule;
 use Illuminate\Validation\Validator;
@@ -27,6 +28,11 @@ class StoreResearchSubmissionRequest extends FormRequest
             'research_type' => ['required', Rule::exists('research_types', 'slug')->where('is_active', true)],
             'academic_year_id' => ['required', 'exists:academic_years,id'],
             'abstract' => ['nullable', 'string', 'max:5000'],
+            'keywords' => ['nullable', 'string', 'max:2000'],
+            'research_interests' => ['sometimes', 'nullable', 'array', 'list', 'max:5'],
+            'research_interests.*' => ['required', 'string', 'max:255'],
+            'funding_source' => ['nullable', Rule::in(['personal', 'internal', 'external'])],
+            'funding_organization' => ['nullable', 'required_if:funding_source,external', 'prohibited_unless:funding_source,external', 'string', 'max:255'],
             'authors' => ['required', 'array', 'min:1'],
             'authors.*' => ['required', 'string', 'max:255'],
             'author_details' => ['required', 'array', 'min:1', 'max:20'],
@@ -48,6 +54,8 @@ class StoreResearchSubmissionRequest extends FormRequest
             'faculty_remarks' => ['nullable', 'string', 'max:2000'],
             'attachments' => ['nullable', 'array', 'max:20'],
             'attachments.*' => ['file', 'max:10240', 'mimes:pdf,doc,docx,jpg,jpeg,png,webp'],
+            'attachment_requirements' => ['nullable', 'array'],
+            'attachment_requirements.*' => ['nullable', 'integer', Rule::exists('research_evidence_requirements', 'id')->where('research_type_id', ResearchType::where('slug', $this->input('research_type'))->value('id'))->where('is_active', true)],
             'submit_now' => ['sometimes', 'boolean'],
         ];
     }

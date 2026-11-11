@@ -74,7 +74,6 @@ const uploadProblem = computed(() => {
 const involvementHasAuthors = computed(() => props.researchTypes.find((type) => type.value === form.research_type)?.has_authors ?? true);
 const requirements = computed(() => props.researchTypes.find((type) => type.value === form.research_type)?.requirements ?? []);
 watch(() => form.research_type, () => { form.attachment_requirements = form.attachments.map(() => ''); });
-const titleLabel = computed(() => involvementHasAuthors.value ? 'Research title' : 'Title of the paper, thesis or activity');
 const allocatedPointsTotal = computed(() => form.author_points.reduce((total, points) => total + Number(points || 0), 0));
 const allocationsMatch = computed(() => !involvementHasAuthors.value || Math.abs(allocatedPointsTotal.value - configuredPoints.value) <= 0.01);
 const authorDetailsError = computed(() => (form.errors as Record<string, string>).author_details);
@@ -99,7 +98,7 @@ function formatValidationField(field: string): string {
     if (attachmentField) return `Evidence attachment ${Number(attachmentField[1]) + 1}`;
 
     return ({
-        title: 'Research title',
+        title: 'Title',
         research_type: 'Research type',
         academic_year_id: 'Academic year',
         authors: 'Authors',
@@ -288,8 +287,8 @@ const save = (submitNow: boolean) => {
             </div>
             <div class="grid gap-4 md:grid-cols-2">
                 <div class="md:col-span-2">
-                    <label class="ori-label">{{ titleLabel }} <span aria-hidden="true" class="text-rose-600">*</span><span class="sr-only"> required</span></label>
-                    <input v-model="form.title" type="text" class="ori-input" required />
+                    <label for="involvement-title" class="ori-label">Title (research, conference, event, activity, book, patent, or other) <span aria-hidden="true" class="text-rose-600">*</span><span class="sr-only"> required</span></label>
+                    <input id="involvement-title" v-model="form.title" type="text" class="ori-input" required />
                     <InputError :message="form.errors.title" class="mt-1" />
                 </div>
 

@@ -95,7 +95,6 @@ watch(() => form.research_type, () => {
     form.attachment_requirements = form.attachments.map(() => '');
     Object.keys(form.existing_attachment_requirements).forEach((id) => { form.existing_attachment_requirements[id] = ''; });
 });
-const titleLabel = computed(() => involvementHasAuthors.value ? 'Research title' : 'Title of the paper, thesis or activity');
 const allocationsMatch = computed(() => !involvementHasAuthors.value || Math.abs(allocatedPointsTotal.value - configuredPoints.value) <= 0.01);
 const authorDetailsError = computed(() => (form.errors as Record<string, string>).author_details);
 
@@ -216,8 +215,8 @@ const save = (submitNow: boolean) => {
             <div v-if="Object.keys(form.errors).length" role="alert" class="border border-rose-200 bg-rose-50 px-4 py-3 text-sm text-rose-800"><p v-for="(message, field) in form.errors" :key="field">{{ message }}</p></div>
             <div class="grid gap-4 md:grid-cols-2">
                 <div class="md:col-span-2">
-                    <label class="ori-label">{{ titleLabel }}</label>
-                    <input v-model="form.title" type="text" class="ori-input" required />
+                    <label for="involvement-title" class="ori-label">Title (research, conference, event, activity, book, patent, or other)</label>
+                    <input id="involvement-title" v-model="form.title" type="text" class="ori-input" required />
                     <InputError :message="form.errors.title" class="mt-1" />
                 </div>
                 <div>

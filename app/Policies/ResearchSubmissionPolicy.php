@@ -17,6 +17,16 @@ class ResearchSubmissionPolicy
 
     public function view(User $user, ResearchSubmission $submission): bool
     {
+        if (! $user->is_active) {
+            return false;
+        }
+
+        if ($user->is_active && ($submission->faculty_id === $user->id
+            || ($submission->status !== SubmissionStatus::Draft
+                && $submission->authorshipAllocations()->where('faculty_id', $user->id)->exists()))) {
+            return true;
+        }
+
         if ($user->isAdmin()) {
             return true;
         }
@@ -27,37 +37,46 @@ class ResearchSubmissionPolicy
                 && $submission->department_id === $user->department_id;
         }
 
-        return $user->isFaculty()
-            && ($submission->faculty_id === $user->id
-                || ($submission->status !== SubmissionStatus::Draft
-                    && $submission->authorshipAllocations()->where('faculty_id', $user->id)->exists()));
+        return false;
     }
 
     public function create(User $user): bool
     {
-        return $user->isFaculty() && $user->is_active;
+        return $user->is_active && $user->hasRole([UserRole::Faculty, UserRole::Coordinator, UserRole::Admin]);
+    }
+
+    public function viewPersonal(User $user, ResearchSubmission $submission): bool
+    {
+        return $user->is_active && ($submission->faculty_id === $user->id
+            || ($submission->status !== SubmissionStatus::Draft && $this->isParticipant($user, $submission)));
+    }
+
+    public function review(User $user, ResearchSubmission $submission): bool
+    {
+        return $user->is_active && ! $submission->hasParticipant($user);
     }
 
     public function viewCertificate(User $user, ResearchSubmission $submission): bool
     {
         return $user->is_active
-            && $user->isFaculty()
             && $submission->status === SubmissionStatus::Approved
-            && $this->view($user, $submission)
+            && $this->isParticipant($user, $submission)
             && ($submission->research_type === 'published_research_published_individual_research_scopus_indexed_journal'
                 || (CertificationSetting::query()->find(1)?->allow_non_scopus ?? false));
     }
 
     public function update(User $user, ResearchSubmission $submission): bool
     {
-        return $user->isFaculty()
+        return $user->is_active
+            && $user->hasRole([UserRole::Faculty, UserRole::Coordinator, UserRole::Admin])
             && $submission->faculty_id === $user->id
             && $submission->status->isEditableByFaculty();
     }
 
     public function delete(User $user, ResearchSubmission $submission): bool
     {
-        return $user->isFaculty()
+        return $user->is_active
+            && $user->hasRole([UserRole::Faculty, UserRole::Coordinator, UserRole::Admin])
             && $submission->faculty_id === $user->id
             && $submission->status === SubmissionStatus::Draft;
     }
@@ -73,6 +92,7 @@ class ResearchSubmissionPolicy
             && $user->is_active
             && $user->department_id !== null
             && $submission->department_id === $user->department_id
+            && ! $submission->hasParticipant($user)
             && $submission->status->canBeEvaluated();
     }
 
@@ -80,7 +100,14 @@ class ResearchSubmissionPolicy
     {
         return $user->isAdmin()
             && $user->is_active
+            && ! $submission->hasParticipant($user)
             && $submission->status->canBeApproved();
+    }
+
+    private function isParticipant(User $user, ResearchSubmission $submission): bool
+    {
+        return $submission->faculty_id === $user->id
+            || $submission->authorshipAllocations()->where('faculty_id', $user->id)->exists();
     }
 
     public function manageUsers(User $user): bool

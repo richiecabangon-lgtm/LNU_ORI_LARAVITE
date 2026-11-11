@@ -62,6 +62,7 @@ const destroy = () => {
         </PageHeader>
 
         <div v-if="usePage().props.errors.evidence" role="alert" class="mb-4 border border-rose-200 bg-rose-50 px-4 py-3 text-sm text-rose-800">{{ usePage().props.errors.evidence }} <Link v-if="can.update" :href="route('faculty.submissions.edit', submission.uuid)" class="font-semibold underline">Edit evidence</Link></div>
+        <div v-if="usePage().props.errors.department" role="alert" class="mb-4 border border-rose-200 bg-rose-50 px-4 py-3 text-sm text-rose-800">{{ usePage().props.errors.department }}</div>
 
         <div class="grid gap-6 lg:grid-cols-3">
             <section class="ori-card space-y-4 p-6 lg:col-span-2">

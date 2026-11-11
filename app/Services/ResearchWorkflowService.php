@@ -24,7 +24,16 @@ class ResearchWorkflowService
             SubmissionStatus::RevisionRequested,
         ]);
 
+        if (! $actor->isFaculty() && ! $submission->department_id && ! $actor->department_id) {
+            throw ValidationException::withMessages([
+                'department' => 'Ask an administrator to assign your department before submitting research for evaluation.',
+            ]);
+        }
+
         $updated = DB::transaction(function () use ($submission, $actor, $notes) {
+            if (! $submission->department_id && $actor->department_id) {
+                $submission->update(['department_id' => $actor->department_id, 'college_id' => $actor->college_id]);
+            }
             $type = $submission->researchType()->lockForUpdate()->firstOrFail();
             $requirements = $type->evidenceRequirements()->where('is_active', true)->orderBy('id')->get();
             $attachments = $submission->attachments()->get();
@@ -56,10 +65,15 @@ class ResearchWorkflowService
             );
         });
 
+        $updated->loadMissing('authorshipAllocations');
         User::query()->where('role', UserRole::Coordinator)
             ->where('is_active', true)
             ->where('department_id', $submission->department_id)
-            ->each(fn (User $coordinator) => $coordinator->notify(new ResearchWorkflowNotification($updated, $actor, 'submitted', $updated->status)));
+            ->each(function (User $coordinator) use ($updated, $actor): void {
+                if ($coordinator->can('evaluate', $updated)) {
+                    $coordinator->notify(new ResearchWorkflowNotification($updated, $actor, 'submitted', $updated->status));
+                }
+            });
 
         return $updated;
     }
@@ -132,8 +146,13 @@ class ResearchWorkflowService
 
             $this->notifySubmissionFaculty($updated, $coordinator, 'evaluated');
             if ($updated->status === SubmissionStatus::Evaluated) {
+                $updated->loadMissing('authorshipAllocations');
                 User::query()->where('role', UserRole::Admin)->where('is_active', true)
-                    ->each(fn (User $admin) => $admin->notify(new ResearchWorkflowNotification($updated, $coordinator, 'evaluated', $updated->status)));
+                    ->each(function (User $admin) use ($updated, $coordinator): void {
+                        if ($admin->can('approve', $updated)) {
+                            $admin->notify(new ResearchWorkflowNotification($updated, $coordinator, 'evaluated', $updated->status));
+                        }
+                    });
             }
 
             return $updated;
@@ -254,7 +273,7 @@ class ResearchWorkflowService
             ->push($submission->faculty_id)
             ->unique();
 
-        User::query()->whereIn('id', $facultyIds)->where('is_active', true)
+        User::query()->whereIn('id', $facultyIds)->where('is_active', true)->where('id', '!=', $actor->id)
             ->each(fn (User $faculty) => $faculty->notify(new ResearchWorkflowNotification($submission, $actor, $action, $submission->status)));
     }
 }

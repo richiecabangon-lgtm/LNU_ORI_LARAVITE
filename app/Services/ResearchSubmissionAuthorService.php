@@ -2,7 +2,6 @@
 
 namespace App\Services;
 
-use App\Enums\UserRole;
 use App\Models\ResearchSubmission;
 use App\Models\ResearchSubmissionAuthor;
 use App\Models\User;
@@ -72,14 +71,12 @@ class ResearchSubmissionAuthorService
                 ? null
                 : User::query()
                     ->whereRaw('LOWER(email) = ?', [mb_strtolower($email)])
-                    ->where('role', UserRole::Faculty)
                     ->where('is_active', true)
                     ->first();
 
             if (! $faculty) {
                 $matchingFaculty = User::query()
                     ->whereRaw('LOWER(name) = ?', [mb_strtolower(trim($author['name']))])
-                    ->where('role', UserRole::Faculty)
                     ->where('is_active', true)
                     ->limit(2)
                     ->get(['id', 'name', 'email', 'college_id', 'department_id']);

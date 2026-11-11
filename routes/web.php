@@ -20,6 +20,7 @@ use App\Http\Controllers\ResearchCertificateController;
 use App\Http\Controllers\ResearchProfileController;
 use App\Http\Controllers\SubmissionAttachmentController;
 use App\Http\Controllers\UserNotificationController;
+use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Route;
 use Inertia\Inertia;
 
@@ -31,6 +32,16 @@ Route::get('/', function () {
 });
 
 Route::middleware(['auth', 'verified'])->group(function () {
+    Route::post('/workspace', function (Request $request) {
+        $validated = $request->validate(['workspace' => ['required', 'string', 'in:faculty,staff']]);
+        $request->session()->put('workspace', [
+            'user_id' => $request->user()->id,
+            'role' => $request->user()->role->value,
+            'selection' => $validated['workspace'],
+        ]);
+
+        return redirect()->route($validated['workspace'] === 'faculty' ? 'faculty.submissions.index' : 'dashboard');
+    })->middleware('role:coordinator|admin')->name('workspace.switch');
     Route::get('/dashboard', DashboardController::class)->name('dashboard');
     Route::get('/news', [NewsController::class, 'index'])->name('news.index');
     Route::get('/submission-attachments/{attachment}/view', [SubmissionAttachmentController::class, 'view'])->name('submission-attachments.view');
@@ -41,7 +52,9 @@ Route::middleware(['auth', 'verified'])->group(function () {
     Route::get('/news/{news}/attachments/{attachment}', [NewsController::class, 'download'])->name('news.attachments.download');
     Route::get('/news/{news}/attachments/{attachment}/view', [NewsController::class, 'view'])->name('news.attachments.view');
     Route::get('/reports/fpes', [ReportController::class, 'fpes'])->name('reports.fpes');
+    Route::get('/reports/my-fpes', [ReportController::class, 'fpes'])->middleware('role:faculty|coordinator|admin')->name('reports.personal');
     Route::get('/research-profiles', [ResearchProfileController::class, 'index'])->name('research-profiles.index');
+    Route::get('/research-profiles/me', [ResearchProfileController::class, 'personal'])->middleware('role:faculty|coordinator|admin')->name('research-profiles.personal');
     Route::get('/research-profiles/{user}', [ResearchProfileController::class, 'show'])->name('research-profiles.show');
     Route::get('/research-authorizations/{author}', [ResearchSubmissionController::class, 'downloadAuthorization'])
         ->name('research-authorizations.download');
@@ -51,7 +64,7 @@ Route::middleware(['auth', 'verified'])->group(function () {
     Route::post('/notifications/{notification}/read', [UserNotificationController::class, 'markRead'])->name('notifications.read');
     Route::post('/notifications/read-all', [UserNotificationController::class, 'markAllRead'])->name('notifications.read-all');
 
-    Route::middleware('role:faculty')->prefix('faculty')->name('faculty.')->group(function () {
+    Route::middleware('role:faculty|coordinator|admin')->prefix('faculty')->name('faculty.')->group(function () {
         Route::get('submissions/{submission}/certificate', [ResearchCertificateController::class, 'show'])->name('certificates.show');
         Route::get('submissions/{submission}/certificate/download', [ResearchCertificateController::class, 'show'])->name('certificates.download');
         Route::post('submissions/extract-metadata', [ResearchSubmissionController::class, 'extractMetadata'])

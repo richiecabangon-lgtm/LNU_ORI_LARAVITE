@@ -15,6 +15,11 @@ const page = usePage();
 const user = computed(() => page.props.auth.user as any);
 const isDark = computed(() => (page.props.appearance as any)?.theme === 'dark');
 const isAdmin = computed(() => user.value?.role === 'admin');
+const canSwitchWorkspace = computed(() => ['admin', 'coordinator'].includes(user.value?.role));
+const isFacultyWorkspace = computed(() => page.props.workspace === 'faculty');
+const isAdminNavigation = computed(() => isAdmin.value && !isFacultyWorkspace.value);
+const workspaceLabel = computed(() => isFacultyWorkspace.value ? 'Faculty workspace' : 'Staff workspace');
+const homeRoute = computed(() => isFacultyWorkspace.value && canSwitchWorkspace.value ? 'faculty.submissions.index' : 'dashboard');
 const flashSuccess = computed(() => (page.props.flash as any)?.success);
 const flashError = computed(() => (page.props.flash as any)?.error);
 const currentTime = ref(new Date());
@@ -87,8 +92,20 @@ function toggleTheme() {
     }, { preserveScroll: true });
 }
 
+function switchWorkspace() {
+    router.post(route('workspace.switch'), { workspace: isFacultyWorkspace.value ? 'staff' : 'faculty' });
+}
+
 const navItems = computed(() => {
     const role = user.value?.role;
+    if (isFacultyWorkspace.value && canSwitchWorkspace.value) {
+        return [
+            { label: 'News', route: 'news.index', match: 'news.*' },
+            { label: 'My Research Profile', route: 'research-profiles.personal', match: 'research-profiles.*' },
+            { label: 'My Submissions', route: 'faculty.submissions.index', match: 'faculty.submissions.*' },
+            { label: 'My FPES', route: 'reports.personal', match: 'reports.personal' },
+        ];
+    }
     const items: NavigationItem[] = [{ label: 'Dashboard', route: 'dashboard', match: 'dashboard' }];
 
     if (role !== 'admin') {
@@ -139,7 +156,7 @@ const navItems = computed(() => {
                 <div class="flex h-16 justify-between">
                     <div class="flex">
                         <div class="flex shrink-0 items-center gap-3">
-                            <Link :href="route('dashboard')" class="flex items-center gap-3">
+                            <Link :href="route(homeRoute)" class="flex items-center gap-3">
                                 <div class="flex h-10 w-10 items-center justify-center rounded-xl bg-ori-blue-700 text-ori-yellow-400 shadow-soft">
                                     <img
                                         src="/images/ori.ico"
@@ -158,8 +175,8 @@ const navItems = computed(() => {
                             </Link>
                         </div>
 
-                        <div :class="isAdmin ? 'hidden xl:-my-px xl:ms-6 xl:flex xl:shrink-0 xl:items-center xl:gap-1' : 'hidden space-x-6 sm:-my-px sm:ms-10 sm:flex'">
-                            <template v-if="isAdmin">
+                        <div :class="isAdminNavigation ? 'hidden xl:-my-px xl:ms-6 xl:flex xl:shrink-0 xl:items-center xl:gap-1' : 'hidden space-x-6 lg:-my-px lg:ms-10 lg:flex'">
+                            <template v-if="isAdminNavigation">
                                 <NavLink :href="route('dashboard')" :active="isActive(navItems[0])">
                                     Dashboard
                                 </NavLink>
@@ -200,13 +217,13 @@ const navItems = computed(() => {
                         </div>
                     </div>
 
-                    <div :class="isAdmin ? 'hidden xl:ms-4 xl:flex xl:shrink-0 xl:items-center' : 'hidden sm:ms-6 sm:flex sm:items-center'">
+                    <div :class="isAdminNavigation ? 'hidden xl:ms-4 xl:flex xl:shrink-0 xl:items-center' : 'hidden lg:ms-6 lg:flex lg:items-center'">
                         <NotificationBell class="me-3" />
                         <button type="button" class="me-3 inline-flex h-10 w-10 items-center justify-center rounded-full border border-ori-blue-100 bg-white text-sm text-ori-blue-700 hover:bg-ori-blue-50" :aria-label="isDark ? 'Switch to light theme' : 'Switch to dark theme'" :title="isDark ? 'Light theme' : 'Dark theme'" @click="toggleTheme">
                             <span aria-hidden="true">{{ isDark ? '☼' : '◐' }}</span>
                         </button>
                         <div class="me-2 hidden rounded-full bg-ori-yellow-100 px-3 py-1 text-xs font-semibold text-ori-blue-800 2xl:block">
-                            {{ user?.role_label }}
+                            {{ user?.role_label }} <span v-if="canSwitchWorkspace">&middot; {{ workspaceLabel }}</span>
                         </div>
                         <div class="relative ms-3">
                             <Dropdown align="right" width="48">
@@ -227,6 +244,12 @@ const navItems = computed(() => {
                                 </template>
 
                                 <template #content>
+                                    <div class="border-b border-ori-blue-100 px-4 py-2 text-xs text-ori-blue-600">
+                                        {{ user?.role_label }}<span v-if="canSwitchWorkspace"> &middot; {{ workspaceLabel }}</span>
+                                    </div>
+                                    <button v-if="canSwitchWorkspace" type="button" class="block w-full px-4 py-2 text-start text-sm text-ori-blue-700 hover:bg-ori-blue-50 focus:bg-ori-blue-50 focus:outline-none" @click="switchWorkspace">
+                                        Switch to {{ isFacultyWorkspace ? 'Staff' : 'Faculty' }} workspace
+                                    </button>
                                     <DropdownLink :href="route('profile.edit')">Profile</DropdownLink>
                                     <DropdownLink :href="route('logout')" method="post" as="button">
                                         Log Out
@@ -236,7 +259,7 @@ const navItems = computed(() => {
                         </div>
                     </div>
 
-                    <div :class="isAdmin ? '-me-2 flex items-center xl:hidden' : '-me-2 flex items-center sm:hidden'">
+                    <div :class="isAdminNavigation ? '-me-2 flex items-center xl:hidden' : '-me-2 flex items-center lg:hidden'">
                         <NotificationBell class="me-2" />
                         <button type="button" class="me-2 inline-flex h-10 w-10 items-center justify-center rounded-full border border-ori-blue-100 bg-white text-ori-blue-700" :aria-label="isDark ? 'Switch to light theme' : 'Switch to dark theme'" @click="toggleTheme">{{ isDark ? '☼' : '◐' }}</button>
                         <button
@@ -255,7 +278,7 @@ const navItems = computed(() => {
                 </div>
             </div>
 
-            <div :class="[{ block: showingNavigationDropdown, hidden: !showingNavigationDropdown }, isAdmin ? 'xl:hidden' : 'sm:hidden']">
+            <div :class="[{ block: showingNavigationDropdown, hidden: !showingNavigationDropdown }, isAdminNavigation ? 'xl:hidden' : 'lg:hidden']">
                 <div class="space-y-1 pb-3 pt-2">
                     <ResponsiveNavLink
                         v-for="item in navItems"
@@ -270,8 +293,12 @@ const navItems = computed(() => {
                     <div class="px-4">
                         <div class="text-base font-medium text-ori-blue-900">{{ user?.name }}</div>
                         <div class="text-sm text-ori-blue-500">{{ user?.email }}</div>
+                        <div class="text-sm text-ori-blue-500">{{ user?.role_label }}<span v-if="canSwitchWorkspace"> &middot; {{ workspaceLabel }}</span></div>
                     </div>
                     <div class="mt-3 space-y-1">
+                        <button v-if="canSwitchWorkspace" type="button" class="block w-full border-l-4 border-transparent py-2 pe-4 ps-3 text-start text-base font-medium text-ori-blue-700 hover:bg-ori-blue-50 focus:bg-ori-blue-50 focus:outline-none" @click="switchWorkspace">
+                            Switch to {{ isFacultyWorkspace ? 'Staff' : 'Faculty' }} workspace
+                        </button>
                         <ResponsiveNavLink :href="route('profile.edit')">Profile</ResponsiveNavLink>
                         <ResponsiveNavLink :href="route('logout')" method="post" as="button">
                             Log Out

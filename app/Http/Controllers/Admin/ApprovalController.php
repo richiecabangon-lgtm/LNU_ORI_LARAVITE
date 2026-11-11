@@ -21,6 +21,7 @@ class ApprovalController extends Controller
         $this->authorize('viewAny', ResearchSubmission::class);
 
         $submissions = ResearchSubmission::query()
+            ->withoutParticipant($request->user())
             ->with([
                 'faculty:id,name',
                 'academicYear:id,name',
@@ -59,6 +60,7 @@ class ApprovalController extends Controller
     public function show(ResearchSubmission $submission): Response
     {
         $this->authorize('view', $submission);
+        $this->authorize('review', $submission);
 
         $submission->load([
             'faculty:id,name,email,designation',

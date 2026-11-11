@@ -10,6 +10,28 @@ use App\Notifications\ResearchWorkflowNotification;
 use App\Services\ResearchWorkflowService;
 use Illuminate\Support\Facades\Notification;
 
+it('prevents a submission participant from evaluating or approving their own research', function () {
+    $college = College::query()->create(['code' => 'CON', 'name' => 'Conflict College']);
+    $department = Department::query()->create(['college_id' => $college->id, 'code' => 'CON', 'name' => 'Conflict Department']);
+    $coordinator = User::factory()->coordinator()->create(['department_id' => $department->id]);
+    $otherCoordinator = User::factory()->coordinator()->create(['department_id' => $department->id]);
+    $admin = User::factory()->admin()->create();
+    $otherAdmin = User::factory()->admin()->create();
+    $year = AcademicYear::query()->create(['name' => 'Conflict year', 'starts_on' => '2026-01-01', 'ends_on' => '2026-12-31', 'is_active' => true]);
+    $submission = ResearchSubmission::query()->create([
+        'faculty_id' => $coordinator->id, 'department_id' => $department->id, 'college_id' => $college->id,
+        'academic_year_id' => $year->id, 'title' => 'Conflict test research', 'research_type' => 'journal_article',
+        'authors' => [$coordinator->name, $admin->name], 'status' => SubmissionStatus::Submitted,
+    ]);
+    $submission->authorshipAllocations()->create(['faculty_id' => $admin->id, 'name' => $admin->name, 'author_order' => 1, 'allocated_points' => 0]);
+
+    expect($coordinator->can('evaluate', $submission))->toBeFalse()
+        ->and($otherCoordinator->can('evaluate', $submission))->toBeTrue();
+    $submission->update(['status' => SubmissionStatus::Evaluated]);
+    expect($admin->can('approve', $submission))->toBeFalse()
+        ->and($otherAdmin->can('approve', $submission))->toBeTrue();
+});
+
 it('notifies assigned coordinators when faculty submit research', function () {
     Notification::fake();
     $college = College::query()->create(['code' => 'NTF', 'name' => 'Notification College']);

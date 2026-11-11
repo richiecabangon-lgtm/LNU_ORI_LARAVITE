@@ -2,6 +2,7 @@
 
 namespace App\Http\Controllers;
 
+use App\Enums\SubmissionStatus;
 use App\Enums\UserRole;
 use App\Models\College;
 use App\Models\Department;
@@ -86,7 +87,7 @@ class ReportController extends Controller
                 'evaluation.coordinator:id,name',
                 'approval:id,research_submission_id,admin_id,final_points,decision,remarks,decided_at',
                 'approval.admin:id,name',
-                'authorshipAllocations:id,research_submission_id,faculty_id,allocated_points',
+                'authorshipAllocations:id,research_submission_id,faculty_id,name,email,allocated_points',
                 'sdgs:id,number,name,image_path',
                 'researchAgendas:id,name,image_path',
             ])
@@ -112,7 +113,8 @@ class ReportController extends Controller
             });
         }
 
-        if ($user->role === UserRole::Faculty) {
+        $personal = $user->isFaculty() || $request->routeIs('reports.personal');
+        if ($personal) {
             $query->where(function ($inner) use ($user) {
                 $inner->where('faculty_id', $user->id)
                     ->orWhereHas('authorshipAllocations', fn ($authors) => $authors->where('faculty_id', $user->id));
@@ -135,10 +137,23 @@ class ReportController extends Controller
                 || collect(preg_split('/[,;|]/', (string) $submission->indexing))->contains(fn (string $entry): bool => mb_strtolower(trim($entry)) === 'scopus'))
                 ->values();
         }
-        $submissions->each(function (ResearchSubmission $submission) use ($user): void {
+        $reviewers = User::query()->where('is_active', true)
+            ->whereIn('role', [UserRole::Coordinator, UserRole::Admin])
+            ->get(['id', 'name', 'email', 'role', 'is_active', 'department_id']);
+        $submissions->each(function (ResearchSubmission $submission) use ($user, $personal, $reviewers): void {
             $submission->setAttribute('report_date', ($submission->publication_date ?? $submission->approved_at ?? $submission->submitted_at ?? $submission->created_at)?->toDateString());
+            $reviewRole = match ($submission->status) {
+                SubmissionStatus::Submitted, SubmissionStatus::UnderEvaluation => UserRole::Coordinator,
+                SubmissionStatus::Evaluated => UserRole::Admin,
+                default => null,
+            };
+            $submission->setAttribute('review_blocked', $reviewRole !== null && ! $reviewers->contains(
+                fn (User $reviewer): bool => $reviewer->role === $reviewRole
+                    && ! $submission->hasParticipant($reviewer)
+                    && ($reviewRole !== UserRole::Coordinator || ($submission->department_id !== null && $reviewer->department_id === $submission->department_id))
+            ));
             $points = $submission->fpesPoints();
-            if ($user->isFaculty()) {
+            if ($personal) {
                 $points = $submission->pointsForFaculty($user);
                 $submission->setAttribute('submitted_by_name', $submission->faculty_id !== $user->id ? $submission->faculty?->name : null);
                 $submission->setRelation('faculty', $user);
@@ -153,6 +168,7 @@ class ReportController extends Controller
     public function fpes(Request $request): Response
     {
         $user = $request->user();
+        $personal = $user->isFaculty() || $request->routeIs('reports.personal');
         ['filters' => $filters, 'period' => $period, 'year' => $year, 'start' => $start, 'end' => $end, 'periodLabel' => $periodLabel, 'submissions' => $submissions] = $this->reportData($request);
         $settings = FpesReportSetting::query()
             ->with(['preparedByUser:id,name', 'reviewedByUser:id,name', 'approvedByUser:id,name'])
@@ -167,16 +183,16 @@ class ReportController extends Controller
             ->orderBy('name')->get(['id', 'name', 'role']);
         $fallbackPrepared = $settings->preparedByUser?->name ?? $settings->prepared_by_name;
         $fallbackApproved = $settings->approvedByUser?->name ?? $settings->approved_by_name;
-        $collegeIds = $user->isFaculty()
+        $collegeIds = $personal
             ? collect([$user->college_id])->filter()->values()
             : $submissions->pluck('college_id')->filter()->unique()->values();
-        $departmentIds = $user->isFaculty()
+        $departmentIds = $personal
             ? collect([$user->department_id])->filter()->values()
             : $submissions->pluck('department_id')->filter()->unique()->values();
         $coordinatorNames = $this->coordinatorNamesForColleges($collegeIds->all(), $departmentIds->all());
         $signatories = [
             'prepared_by' => $user->isFaculty() ? $user->name : ($user->isCoordinator() || $user->isAdmin() ? $user->name : ($fallbackPrepared ?: '')),
-            'reviewed_by' => $user->isCoordinator()
+            'reviewed_by' => $user->isCoordinator() && ! $personal
                 ? $user->name
                 : ($coordinatorNames->first() ?? $settings->reviewedByUser?->name ?? $settings->reviewed_by_name ?? ''),
             'approved_by' => $fallbackApproved ?? $settings->approved_by_name ?? '',
@@ -206,21 +222,22 @@ class ReportController extends Controller
                 'research_type' => $filters['research_type'] ?? null,
             ],
             'researchTypes' => ResearchType::withTrashed()->orderBy('name')->get(['slug', 'name', 'is_active', 'deleted_at']),
-            'scope' => $user->role->value,
-            'archives' => $user->isAdmin() ? DB::table('fpes_archives')
+            'scope' => $personal ? 'faculty' : $user->role->value,
+            'personalReport' => $request->routeIs('reports.personal'),
+            'archives' => $user->isAdmin() && ! $personal ? DB::table('fpes_archives')
                 ->join('users as creator', 'creator.id', '=', 'fpes_archives.created_by')
                 ->leftJoin('users as restorer', 'restorer.id', '=', 'fpes_archives.restored_by')
                 ->select('fpes_archives.*', 'creator.name as creator_name', 'restorer.name as restorer_name')
                 ->selectSub(DB::table('fpes_archive_submissions')->selectRaw('count(*)')->whereColumn('fpes_archive_id', 'fpes_archives.id'), 'submission_count')
                 ->orderByDesc('fpes_archives.id')->get() : [],
-            'exportColumns' => $user->isAdmin() ? self::EXPORT_COLUMNS : [],
-            'colleges' => $user->isAdmin()
+            'exportColumns' => $user->isAdmin() && ! $personal ? self::EXPORT_COLUMNS : [],
+            'colleges' => $user->isAdmin() && ! $personal
                 ? College::query()->orderBy('name')->get(['id', 'name'])
                 : [],
-            'departments' => $user->isAdmin()
+            'departments' => $user->isAdmin() && ! $personal
                 ? Department::query()->orderBy('name')->get(['id', 'name', 'college_id'])
                 : [],
-            'coordinators' => $user->isAdmin()
+            'coordinators' => $user->isAdmin() && ! $personal
                 ? User::query()->where('role', UserRole::Coordinator)->where('is_active', true)->orderBy('name')->get(['id', 'name', 'department_id'])
                 : [],
         ]);

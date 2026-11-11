@@ -24,6 +24,7 @@ class EvaluationController extends Controller
         $queue = ResearchSubmission::query()
             ->with(['faculty:id,name', 'academicYear:id,name', 'researchType:slug,name', 'college:id,name'])
             ->where('department_id', $request->user()->department_id ?? 0)
+            ->withoutParticipant($request->user())
             ->when(
                 $request->string('tab')->toString() === 'completed',
                 fn ($q) => $q->whereIn('status', [
@@ -60,11 +61,7 @@ class EvaluationController extends Controller
     public function show(ResearchSubmission $submission): Response
     {
         $this->authorize('view', $submission);
-
-        if ($submission->status === SubmissionStatus::Submitted) {
-            $this->workflow->startEvaluation($submission, request()->user());
-            $submission->refresh();
-        }
+        $this->authorize('review', $submission);
 
         $submission->load([
             'faculty:id,name,email,designation',

@@ -3,6 +3,7 @@
 namespace App\Models;
 
 use App\Enums\SubmissionStatus;
+use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
@@ -167,6 +168,30 @@ class ResearchSubmission extends Model
     public function authorshipAllocations(): HasMany
     {
         return $this->hasMany(ResearchSubmissionAuthor::class)->orderBy('author_order');
+    }
+
+    public function scopeWithoutParticipant(Builder $query, User $user): void
+    {
+        $query->where('faculty_id', '!=', $user->id)
+            ->whereDoesntHave('authorshipAllocations', function (Builder $authors) use ($user): void {
+                $authors->where('faculty_id', $user->id)
+                    ->orWhereRaw('LOWER(email) = ?', [mb_strtolower(trim($user->email))])
+                    ->orWhere(function (Builder $unlinked) use ($user): void {
+                        $unlinked->whereNull('faculty_id')
+                            ->whereRaw('LOWER(name) = ?', [mb_strtolower(trim($user->name))]);
+                    });
+            });
+    }
+
+    public function hasParticipant(User $user): bool
+    {
+        if ($this->faculty_id === $user->id) {
+            return true;
+        }
+
+        return $this->authorshipAllocations->contains(fn (ResearchSubmissionAuthor $author): bool => $author->faculty_id === $user->id
+            || ($author->email !== null && mb_strtolower(trim($author->email)) === mb_strtolower(trim($user->email)))
+            || ($author->faculty_id === null && mb_strtolower(trim($author->name)) === mb_strtolower(trim($user->name))));
     }
 
     public function evaluation(): HasOne

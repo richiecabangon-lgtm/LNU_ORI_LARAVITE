@@ -21,9 +21,31 @@ class HandleInertiaRequests extends Middleware
     public function share(Request $request): array
     {
         $user = $request->user();
+        $workspace = $request->session()->get('workspace');
+        $isStaff = $user && $user->is_active && ($user->isCoordinator() || $user->isAdmin());
+        if ($workspace !== null && (! $isStaff || ! is_array($workspace)
+            || ($workspace['user_id'] ?? null) !== $user->id
+            || ($workspace['role'] ?? null) !== $user->role->value
+            || ! in_array($workspace['selection'] ?? null, ['faculty', 'staff'], true))) {
+            $request->session()->forget('workspace');
+            $workspace = null;
+        }
+        $isFacultyWorkspace = $isStaff && is_array($workspace)
+            && ($workspace['user_id'] ?? null) === $user->id
+            && ($workspace['role'] ?? null) === $user->role->value
+            && ($workspace['selection'] ?? null) === 'faculty';
+
+        if ($isFacultyWorkspace && $request->isMethod('GET') && (
+            $request->routeIs('dashboard', 'admin.*', 'coordinator.*', 'reports.fpes', 'research-profiles.index')
+            || ($request->routeIs('research-profiles.show') && (string) $request->route('user')?->id !== (string) $user->id)
+        )) {
+            $request->session()->forget('workspace');
+            $isFacultyWorkspace = false;
+        }
 
         return [
             ...parent::share($request),
+            'workspace' => $isFacultyWorkspace || $user?->isFaculty() ? 'faculty' : 'staff',
             'auth' => [
                 'user' => $user ? [
                     'id' => $user->id,

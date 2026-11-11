@@ -110,12 +110,23 @@ it('rejects unsupported file types for paper extraction', function () {
         ->assertJsonValidationErrors('paper');
 });
 
-it('forbids non-faculty roles from using paper extraction', function () {
-    $coordinator = User::factory()->coordinator()->create();
+it('allows active staff to extract metadata for personal submissions', function (string $role) {
+    $staff = User::factory()->{$role}()->create();
+    $this->mock(ResearchPaperMetadataExtractor::class)
+        ->shouldReceive('extract')->once()->andReturn(['fields' => ['title' => 'Suggested title'], 'extracted_fields' => ['title']]);
 
-    $this->actingAs($coordinator)
+    $this->actingAs($staff)
         ->postJson(route('faculty.submissions.extract-metadata'), [
-            'paper' => UploadedFile::fake()->create('paper.pdf', 10, 'application/pdf'),
+            'paper' => UploadedFile::fake()->createWithContent('paper.pdf', '%PDF-1.4'),
         ])
-        ->assertForbidden();
+        ->assertOk()->assertJsonPath('fields.title', 'Suggested title');
+})->with(['coordinator', 'admin']);
+
+it('forbids inactive staff from using paper extraction', function () {
+    $staff = User::factory()->coordinator()->create(['is_active' => false]);
+
+    $this->actingAs($staff)
+        ->postJson(route('faculty.submissions.extract-metadata'), [
+            'paper' => UploadedFile::fake()->createWithContent('paper.pdf', '%PDF-1.4'),
+        ])->assertForbidden();
 });

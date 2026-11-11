@@ -37,6 +37,7 @@ class ResearchWorkflowNotification extends Notification
     public function toArray(object $notifiable): array
     {
         $url = match (true) {
+            $notifiable instanceof User && $notifiable->can('viewPersonal', $this->submission) => route('faculty.submissions.show', $this->submission->uuid),
             $notifiable instanceof User && $notifiable->isFaculty() => route('faculty.submissions.show', $this->submission->uuid),
             $notifiable instanceof User && $notifiable->isCoordinator() => route('coordinator.evaluations.show', $this->submission->uuid),
             $notifiable instanceof User && $notifiable->isAdmin() => route('admin.approvals.show', $this->submission->uuid),

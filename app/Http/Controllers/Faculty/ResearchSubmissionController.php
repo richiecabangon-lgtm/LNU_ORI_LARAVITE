@@ -125,12 +125,12 @@ class ResearchSubmissionController extends Controller
     {
         $submission = $author->submission;
         $viewer = $request->user();
-        $mayViewAuthorization = $viewer->isAdmin()
+        $mayViewAuthorization = ($viewer->is_active && $viewer->isAdmin())
             || ($viewer->isCoordinator()
                 && $viewer->is_active
                 && $viewer->department_id !== null
                 && $viewer->department_id === $submission->department_id)
-            || ($viewer->isFaculty() && $viewer->id === $submission->faculty_id);
+            || ($viewer->is_active && $viewer->id === $submission->faculty_id);
 
         abort_unless($mayViewAuthorization && $author->authorization_path, 403);
     }
@@ -182,7 +182,7 @@ class ResearchSubmissionController extends Controller
 
     public function show(ResearchSubmission $submission): Response
     {
-        $this->authorize('view', $submission);
+        $this->authorize('viewPersonal', $submission);
 
         $submission->load([
             'faculty:id,name,email',
@@ -210,7 +210,7 @@ class ResearchSubmissionController extends Controller
                     || (request()->user()->isCoordinator()
                         && request()->user()->department_id !== null
                         && request()->user()->department_id === $submission->department_id)
-                    || (request()->user()->isFaculty() && request()->user()->id === $submission->faculty_id),
+                    || (request()->user()->is_active && request()->user()->id === $submission->faculty_id),
             ],
         ]);
     }
@@ -331,7 +331,7 @@ class ResearchSubmissionController extends Controller
             'researchAgendas' => ResearchAgenda::query()->where('is_active', true)->orderBy('name')->get(['id', 'name', 'description', 'image_path']),
             'currentFaculty' => $user->only(['id', 'name', 'email', 'institutional_profile_url', 'research_interests']),
             'facultyDirectory' => User::query()
-                ->where('role', UserRole::Faculty)
+                ->whereIn('role', [UserRole::Faculty, UserRole::Coordinator, UserRole::Admin])
                 ->where('is_active', true)
                 ->with(['college:id,name', 'department:id,name'])
                 ->orderBy('name')

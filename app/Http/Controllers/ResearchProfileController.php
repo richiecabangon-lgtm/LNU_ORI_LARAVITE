@@ -64,11 +64,16 @@ class ResearchProfileController extends Controller
         ]);
     }
 
+    public function personal(Request $request): RedirectResponse
+    {
+        return redirect()->route('research-profiles.show', $request->user());
+    }
+
     public function show(Request $request, User $user): Response
     {
-        abort_unless($user->isFaculty(), 404);
+        abort_unless($user->hasRole([UserRole::Faculty, UserRole::Coordinator, UserRole::Admin]), 404);
         abort_unless(! $request->user()->isFaculty() || $request->user()->is($user), 403);
-        abort_unless(! $request->user()->isCoordinator()
+        abort_unless($request->user()->is($user) || ! $request->user()->isCoordinator()
             || ($request->user()->department_id !== null && $request->user()->department_id === $user->department_id), 404);
 
         $submissions = ResearchSubmission::query()

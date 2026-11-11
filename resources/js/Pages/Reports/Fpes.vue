@@ -8,7 +8,7 @@ import { computed, reactive, ref, watch } from 'vue';
 type Faculty = { id: number; name: string; employee_id: string | null; designation: string | null; orcid_url: string | null; google_scholar_url: string | null; scopus_url: string | null; institutional_profile_url: string | null };
 type Submission = {
     id: number; title: string; reference_code: string; research_type: string; research_type_label: string; publication_date: string | null; report_date?: string | null;
-    status: string; indexing: string | null; claimed_points: number | string | null; fpes_points: number | string; faculty: Faculty; submitted_by_name?: string | null;
+    status: string; review_blocked: boolean; indexing: string | null; claimed_points: number | string | null; fpes_points: number | string; faculty: Faculty; submitted_by_name?: string | null;
     college: { name: string } | null; department: { name: string } | null;
     faculty_remarks: string | null;
     evaluation: { score: number | string | null; awarded_points: number | string | null; remarks: string | null; coordinator: { name: string } | null } | null;
@@ -26,6 +26,7 @@ const props = defineProps<{
     filters: { period: string; year: number; month: number; quarter: number; semester: number; college_id: number | null; department_id: number | null; include_archived: boolean; report_kind: 'all' | 'scopus' | 'patent'; research_type: string | null };
     researchTypes: Array<{ slug: string; name: string; is_active: boolean; deleted_at: string | null }>;
     scope: string;
+    personalReport: boolean;
     archives: Array<{ id: number; start_date: string; end_date: string; created_at: string; creator_name: string; restored_at: string | null; restorer_name: string | null; submission_count: number }>;
     colleges: Array<{ id: number; name: string }>;
     departments: Array<{ id: number; name: string; college_id: number }>;
@@ -168,7 +169,7 @@ const departmentSummaries = computed(() => {
 });
 
 function applyFilters() {
-    router.get(route('reports.fpes'), { ...filterForm, include_archived: Number(filterForm.include_archived) }, { preserveState: true, preserveScroll: true });
+    router.get(route(props.personalReport ? 'reports.personal' : 'reports.fpes'), { ...filterForm, include_archived: Number(filterForm.include_archived) }, { preserveState: true, preserveScroll: true });
 }
 
 function printReport() {
@@ -323,7 +324,7 @@ function publicationDateLabel(date: string | null): string {
                     <thead><tr class="border-y border-slate-500 bg-slate-100"><th class="p-2">Researcher</th><th class="p-2">Type</th><th class="p-2">Title</th><th class="p-2">Reference</th><th class="p-2">Status</th><th class="p-2">Indexing source</th></tr></thead>
                     <tbody>
                         <tr v-for="item in submissions" :key="item.id" class="border-b border-slate-300 align-top">
-                            <td class="p-2">{{ item.faculty.name }}<span v-if="scope === 'faculty' && item.submitted_by_name" class="block text-slate-600">Co-authored · Submitted by {{ item.submitted_by_name }}</span></td><td class="p-2">{{ item.research_type_label }}</td><td class="p-2">{{ item.title }}</td><td class="p-2">{{ item.reference_code }}</td><td class="p-2">{{ statusLabel(item.status) }}</td>
+                            <td class="p-2">{{ item.faculty.name }}<span v-if="scope === 'faculty' && item.submitted_by_name" class="block text-slate-600">Co-authored · Submitted by {{ item.submitted_by_name }}</span></td><td class="p-2">{{ item.research_type_label }}</td><td class="p-2">{{ item.title }}</td><td class="p-2">{{ item.reference_code }}</td><td class="p-2">{{ statusLabel(item.status) }}<span v-if="item.review_blocked" class="block text-rose-700">Awaiting an independent reviewer</span></td>
                             <td class="p-2"><span v-if="item.research_type === 'published_research_published_individual_research_scopus_indexed_journal'" class="block">Catalogue: Scopus-indexed journal</span><span v-if="item.indexing" class="block">Reported: {{ item.indexing }}</span><span v-if="!item.indexing && item.research_type !== 'published_research_published_individual_research_scopus_indexed_journal'">Not recorded</span></td>
                         </tr>
                         <tr v-if="submissions.length === 0"><td colspan="6" class="p-6 text-center">No research records for the selected filters.</td></tr>
@@ -347,7 +348,7 @@ function publicationDateLabel(date: string | null): string {
                             <tr v-for="row in facultyReportRows" :key="row.id">
                                 <td><strong>{{ row.title }}</strong><span class="block text-slate-600">{{ row.reference_code }}</span><span v-if="row.submitted_by_name" class="block text-slate-600">Co-authored · Submitted by {{ row.submitted_by_name }}</span><span v-if="row.research_interests?.length" class="block text-slate-600">Interests: {{ row.research_interests.join(', ') }}</span></td>
                                 <td>{{ row.research_type_label }}<span class="block text-slate-600">{{ publicationDateLabel(row.publication_date ?? row.report_date ?? null) }}</span></td>
-                                <td><strong>{{ statusLabel(row.status) }}</strong><span v-if="row.decisionMaker" class="block">{{ row.approval?.decision === 'rejected' ? 'Rejected' : 'Approved' }} by {{ row.decisionMaker }}</span><span v-else-if="row.status === 'evaluated'" class="block text-slate-600">Awaiting admin decision</span></td>
+                                <td><strong>{{ statusLabel(row.status) }}</strong><span v-if="row.review_blocked" class="block text-rose-700">Awaiting an independent reviewer</span><span v-if="row.decisionMaker" class="block">{{ row.approval?.decision === 'rejected' ? 'Rejected' : 'Approved' }} by {{ row.decisionMaker }}</span><span v-else-if="row.status === 'evaluated'" class="block text-slate-600">Awaiting admin decision</span></td>
                                 <td class="text-right tabular-nums">{{ row.approvedPoints.toFixed(2) }}</td>
                                 <td>
                                     <div v-if="row.rejectionReason" class="mb-1"><strong>Reason:</strong> {{ row.rejectionReason }}<span v-if="row.decisionMaker" class="block text-slate-600">Rejected by {{ row.decisionMaker }}</span></div>

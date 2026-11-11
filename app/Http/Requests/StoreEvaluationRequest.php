@@ -27,10 +27,11 @@ class StoreEvaluationRequest extends FormRequest
             ->value('points_per_output') ?? 999999.99;
 
         return [
-            'score' => ['nullable', 'numeric', 'min:0', 'max:100'],
-            'quality_rating' => ['nullable', 'integer', 'min:1', 'max:5'],
-            'relevance_rating' => ['nullable', 'integer', 'min:1', 'max:5'],
-            'documentation_rating' => ['nullable', 'integer', 'min:1', 'max:5'],
+            'score' => ['required', 'numeric', 'min:0', 'max:100'],
+            'quality_rating' => ['required', 'integer', 'min:1', 'max:5'],
+            'relevance_rating' => ['required', 'integer', 'min:1', 'max:5'],
+            'documentation_rating' => ['required', 'integer', 'min:1', 'max:5'],
+            'review_confirmed' => ['accepted'],
             'recommendation' => ['required', Rule::enum(EvaluationRecommendation::class)],
             'awarded_points' => ['nullable', 'numeric', 'min:0', 'max:'.$pointsLimit],
             'remarks' => ['required', 'string', 'max:5000'],

@@ -2,6 +2,7 @@
 
 namespace App\Http\Requests;
 
+use App\Models\ResearchSubmission;
 use Illuminate\Contracts\Validation\ValidationRule;
 use Illuminate\Foundation\Http\FormRequest;
 
@@ -12,7 +13,7 @@ class ExtractResearchMetadataRequest extends FormRequest
      */
     public function authorize(): bool
     {
-        return $this->user()?->isFaculty() === true && $this->user()->is_active;
+        return $this->user()?->can('create', ResearchSubmission::class) ?? false;
     }
 
     /**

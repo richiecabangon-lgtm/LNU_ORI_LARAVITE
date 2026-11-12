@@ -5,6 +5,7 @@ import StatusBadge from '@/Components/ORI/StatusBadge.vue';
 import AttachmentViewer from '@/Components/ORI/AttachmentViewer.vue';
 import AuthorizationProofLink from '@/Components/ORI/AuthorizationProofLink.vue';
 import EvidenceHistory from '@/Components/ORI/EvidenceHistory.vue';
+import ClaimCalculation from '@/Components/ORI/ClaimCalculation.vue';
 import { formatFundingSource } from '@/Utils/fundingSource';
 import { Head, Link, router, usePage } from '@inertiajs/vue3';
 
@@ -83,11 +84,8 @@ const destroy = () => {
                     <div v-if="submission.research_agendas?.length"><h3 class="text-xs font-semibold uppercase text-ori-blue-400">Research agendas</h3><div class="mt-2 flex flex-wrap gap-2"><span v-for="agenda in submission.research_agendas" :key="agenda.id" class="inline-flex items-center gap-2 border border-ori-blue-100 px-2 py-1 text-sm"><img v-if="agenda.image_url" :src="agenda.image_url" :alt="`${agenda.name} image`" class="h-8 w-8 rounded object-cover" /><span>{{ agenda.name }}</span></span></div></div>
                 </div>
 
+                <ClaimCalculation :submission="submission" />
                 <dl class="grid gap-4 sm:grid-cols-2">
-                    <div class="sm:col-span-2">
-                        <dt class="text-xs font-semibold uppercase tracking-wide text-ori-blue-400">Research interests</dt>
-                        <dd class="mt-1 break-words text-sm text-ori-blue-900">{{ submission.research_interests?.join(', ') || '—' }}</dd>
-                    </div>
                     <div>
                         <dt class="text-xs font-semibold uppercase tracking-wide text-ori-blue-400">Funding source</dt>
                         <dd class="mt-1 break-words text-sm text-ori-blue-900">{{ formatFundingSource(submission.funding_source, submission.funding_organization) }}</dd>

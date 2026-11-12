@@ -30,7 +30,7 @@ class ResearchSubmissionAuthorService
         );
 
         $allocationsTotal = round(array_sum(array_map(fn (array $author): float => (float) $author['allocated_points'], $authors)), 2);
-        if (abs($allocationsTotal - $totalPoints) > 0.01) {
+        if ((int) round($allocationsTotal * 100) !== (int) round($totalPoints * 100)) {
             throw ValidationException::withMessages(['author_details' => 'Author allocations must add up to the point total for this research type.']);
         }
 

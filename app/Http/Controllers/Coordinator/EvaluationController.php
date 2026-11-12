@@ -66,7 +66,7 @@ class EvaluationController extends Controller
         $submission->load([
             'faculty:id,name,email,designation',
             'academicYear:id,name',
-            'researchType:slug,name,has_authors',
+            'researchType:slug,name,has_authors,semester_ceiling',
             'college:id,name',
             'department:id,name',
             'attachments',

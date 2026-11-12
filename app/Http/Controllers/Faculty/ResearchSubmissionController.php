@@ -17,9 +17,12 @@ use App\Models\ResearchTypePointSetting;
 use App\Models\Sdg;
 use App\Models\SubmissionAttachment;
 use App\Models\User;
+use App\Services\ResearchClaimCalculator;
 use App\Services\ResearchPaperMetadataExtractor;
 use App\Services\ResearchSubmissionAuthorService;
+use App\Services\ResearchSubmissionDuplicateService;
 use App\Services\ResearchWorkflowService;
+use Illuminate\Database\UniqueConstraintViolationException;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
@@ -140,19 +143,20 @@ class ResearchSubmissionController extends Controller
         $user = $request->user();
         $data = $request->validated();
 
-        $points = $this->configuredPoints($data['research_type']);
+        $claim = app(ResearchClaimCalculator::class)->calculate($request, ResearchType::query()->where('slug', $data['research_type'])->firstOrFail());
+        $points = $claim['claimed_points'];
 
         $storedFiles = [];
         $obsoleteFiles = [];
         try {
-            $submission = DB::transaction(function () use ($request, $user, $data, $points, &$storedFiles, &$obsoleteFiles) {
+            $submission = DB::transaction(function () use ($request, $user, $data, $points, $claim, &$storedFiles, &$obsoleteFiles) {
                 $submission = ResearchSubmission::query()->create([
                     ...collect($data)->except(['attachments', 'attachment_requirements', 'submit_now', 'author_details', 'claimed_points', 'sdgs', 'research_agendas'])->all(),
                     'faculty_id' => $user->id,
                     'college_id' => $user->college_id,
                     'department_id' => $user->department_id,
                     'status' => SubmissionStatus::Draft,
-                    'claimed_points' => $points,
+                    ...$claim,
                     'normalized_title' => ResearchSubmission::normalizeTitle($data['title']),
                 ]);
 
@@ -169,6 +173,7 @@ class ResearchSubmissionController extends Controller
             });
         } catch (\Throwable $exception) {
             $this->deleteFiles($storedFiles);
+            $this->throwDuplicateValidationError($exception, $data, $user);
             throw $exception;
         }
         $this->deleteFiles($obsoleteFiles);
@@ -187,7 +192,7 @@ class ResearchSubmissionController extends Controller
         $submission->load([
             'faculty:id,name,email',
             'academicYear:id,name',
-            'researchType:slug,name,has_authors',
+            'researchType:slug,name,has_authors,semester_ceiling',
             'college:id,name',
             'department:id,name',
             'attachments',
@@ -219,10 +224,21 @@ class ResearchSubmissionController extends Controller
     {
         $this->authorize('update', $submission);
 
-        $submission->load(['attachments', 'researchType:slug,name', 'authorshipAllocations.faculty:id,name,email', 'sdgs:id,number,name,image_path', 'researchAgendas:id,name,image_path']);
+        $submission->load(['attachments', 'authorshipAllocations.faculty:id,name,email', 'sdgs:id,number,name,image_path', 'researchAgendas:id,name,image_path']);
+
+        $meta = $this->formMeta($request->user());
+        if ($submission->unit_snapshot !== null) {
+            foreach ($meta['researchTypes'] as &$type) {
+                if ($type['value'] === $submission->research_type) {
+                    $type['unit'] = $submission->unit_snapshot;
+                }
+            }
+            unset($type);
+            $meta['researchTypePoints']->put($submission->research_type, $submission->rate_snapshot);
+        }
 
         return Inertia::render('Faculty/Submissions/Edit', [
-            ...$this->formMeta($request->user()),
+            ...$meta,
             'submission' => $submission,
         ]);
     }
@@ -235,12 +251,13 @@ class ResearchSubmissionController extends Controller
             $data['funding_organization'] = null;
         }
 
-        $points = $this->configuredPoints($data['research_type']);
+        $claim = app(ResearchClaimCalculator::class)->calculate($request, ResearchType::query()->where('slug', $data['research_type'])->firstOrFail());
+        $points = $claim['claimed_points'];
 
         $storedFiles = [];
         $obsoleteFiles = [];
         try {
-            DB::transaction(function () use ($request, $submission, $data, $points, &$storedFiles, &$obsoleteFiles) {
+            DB::transaction(function () use ($request, $submission, $data, $points, $claim, &$storedFiles, &$obsoleteFiles) {
                 $existingMappings = $data['existing_attachment_requirements'] ?? [];
                 $attachmentIds = $submission->attachments()->pluck('id')->map(fn ($id) => (string) $id)->all();
                 if (array_diff(array_keys($existingMappings), $attachmentIds)) {
@@ -254,7 +271,7 @@ class ResearchSubmissionController extends Controller
                 }
                 $submission->update([
                     ...collect($data)->except(['attachments', 'attachment_requirements', 'existing_attachment_requirements', 'submit_now', 'author_details', 'claimed_points', 'sdgs', 'research_agendas'])->all(),
-                    'claimed_points' => $points,
+                    ...$claim,
                     'normalized_title' => ResearchSubmission::normalizeTitle($data['title']),
                 ]);
                 $this->authorService->sync($submission, $data['author_details'], $points, $storedFiles, $obsoleteFiles);
@@ -268,6 +285,7 @@ class ResearchSubmissionController extends Controller
             });
         } catch (\Throwable $exception) {
             $this->deleteFiles($storedFiles);
+            $this->throwDuplicateValidationError($exception, $data, $request->user(), $submission->id);
             throw $exception;
         }
         $this->deleteFiles($obsoleteFiles);
@@ -277,6 +295,20 @@ class ResearchSubmissionController extends Controller
             ->with('success', $request->boolean('submit_now')
                 ? 'Submission sent for evaluation.'
                 : 'Submission updated successfully.');
+    }
+
+    private function throwDuplicateValidationError(\Throwable $exception, array $data, User $user, ?int $exceptId = null): void
+    {
+        $duplicates = app(ResearchSubmissionDuplicateService::class);
+
+        if (! $exception instanceof UniqueConstraintViolationException || ! $duplicates->isTitleTypeViolation($exception)) {
+            return;
+        }
+
+        $message = $duplicates->message($data['title'], $data['research_type'], $user, $exceptId);
+        if ($message !== null) {
+            throw ValidationException::withMessages(['title' => $message]);
+        }
     }
 
     public function submit(Request $request, ResearchSubmission $submission): RedirectResponse
@@ -323,8 +355,8 @@ class ResearchSubmissionController extends Controller
             'academicYears' => AcademicYear::query()->active()->orderByDesc('starts_on')->get(['id', 'name', 'is_current']),
             'researchTypes' => ResearchType::active()->orderBy('sort_order')->orderBy('name')
                 ->with(['evidenceRequirements' => fn ($query) => $query->where('is_active', true)->orderBy('id')])
-                ->get(['id', 'slug', 'name', 'category', 'has_authors'])
-                ->map(fn (ResearchType $type): array => ['value' => $type->slug, 'label' => $type->name, 'group' => $type->category ?? 'Other', 'has_authors' => $type->has_authors, 'requirements' => $type->evidenceRequirements])
+                ->get(['id', 'slug', 'name', 'category', 'has_authors', 'unit', 'semester_ceiling'])
+                ->map(fn (ResearchType $type): array => ['value' => $type->slug, 'label' => $type->name, 'group' => $type->category ?? 'Other', 'has_authors' => $type->has_authors, 'unit' => $type->unit, 'semester_ceiling' => $type->semester_ceiling, 'requirements' => $type->evidenceRequirements])
                 ->all(),
             'researchTypePoints' => ResearchTypePointSetting::query()->pluck('points_per_output', 'research_type'),
             'sdgs' => Sdg::query()->where('is_active', true)->orderBy('number')->get(['id', 'number', 'name', 'image_path']),
@@ -350,19 +382,6 @@ class ResearchSubmissionController extends Controller
             'k' => $number * 1024,
             default => $number,
         };
-    }
-
-    private function configuredPoints(string $researchType): float
-    {
-        $setting = ResearchTypePointSetting::query()->where('research_type', $researchType)->first();
-
-        if (! $setting) {
-            throw ValidationException::withMessages([
-                'research_type' => 'The administrator has not configured points for this research type yet.',
-            ]);
-        }
-
-        return (float) $setting->points_per_output;
     }
 
     private function storeAttachments(Request $request, ResearchSubmission $submission, array &$storedFiles): void

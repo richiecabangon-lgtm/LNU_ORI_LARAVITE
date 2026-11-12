@@ -29,6 +29,7 @@ class ResearchTypeController extends Controller
                     'description' => $type->description,
                     'category' => $type->category,
                     'has_authors' => $type->has_authors,
+                    'unit' => $type->unit,
                     'points' => (float) ($type->pointSetting?->points_per_output ?? 0),
                     'is_active' => $type->is_active && $type->deleted_at === null,
                     'submission_count' => ResearchSubmission::query()->where('research_type', $type->slug)->count(),
@@ -46,11 +47,12 @@ class ResearchTypeController extends Controller
             'slug' => ['nullable', 'alpha_dash:ascii', 'max:80'],
             'category' => ['nullable', 'string', 'max:100'],
             'has_authors' => ['sometimes', 'boolean'],
+            'unit' => ['sometimes', 'required', 'in:output,hour,day'],
             'description' => ['nullable', 'string', 'max:2000'],
             'points' => ['required', 'numeric', 'min:0', 'max:999999.99'],
         ]);
 
-        $slug = Str::slug($data['slug'] ?: $data['name'], '_');
+        $slug = Str::slug(($data['slug'] ?? null) ?: $data['name'], '_');
         if (ResearchType::withTrashed()->where('slug', $slug)->exists()) {
             return back()->withErrors(['slug' => 'This key has already been used and is reserved for historical records.']);
         }
@@ -61,6 +63,7 @@ class ResearchTypeController extends Controller
             'description' => $data['description'] ?? null,
             'category' => $data['category'] ?? null,
             'has_authors' => $data['has_authors'] ?? true,
+            'unit' => $data['unit'] ?? 'output',
             'sort_order' => (int) ResearchType::withTrashed()->max('sort_order') + 1,
             'updated_by' => $request->user()->id,
             'is_active' => true,
@@ -85,6 +88,7 @@ class ResearchTypeController extends Controller
             'description' => ['nullable', 'string', 'max:2000'],
             'category' => ['nullable', 'string', 'max:100'],
             'has_authors' => ['sometimes', 'boolean'],
+            'unit' => ['sometimes', 'required', 'in:output,hour,day'],
             'points' => ['required', 'numeric', 'min:0', 'max:999999.99'],
             'is_active' => ['required', 'boolean'],
             'requirements' => ['sometimes', 'array', 'max:50'],
@@ -119,6 +123,7 @@ class ResearchTypeController extends Controller
                 'description' => $data['description'] ?? null,
                 'category' => $data['category'] ?? null,
                 'has_authors' => $data['has_authors'] ?? $researchType->has_authors,
+                'unit' => $data['unit'] ?? $researchType->unit,
                 'is_active' => $data['is_active'],
                 'updated_by' => $request->user()->id,
                 'deleted_at' => null,

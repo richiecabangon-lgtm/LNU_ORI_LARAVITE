@@ -6,6 +6,7 @@ import StatusBadge from '@/Components/ORI/StatusBadge.vue';
 import AttachmentViewer from '@/Components/ORI/AttachmentViewer.vue';
 import AuthorizationProofLink from '@/Components/ORI/AuthorizationProofLink.vue';
 import EvidenceHistory from '@/Components/ORI/EvidenceHistory.vue';
+import ClaimCalculation from '@/Components/ORI/ClaimCalculation.vue';
 import { formatFundingSource } from '@/Utils/fundingSource';
 import { Head, Link, useForm } from '@inertiajs/vue3';
 import { computed, ref, watch } from 'vue';
@@ -91,11 +92,8 @@ const submit = () => {
         <div class="grid gap-6 lg:grid-cols-5">
             <section class="ori-card space-y-4 p-6 lg:col-span-3">
                 <h2 class="font-display text-xl font-semibold">Submission dossier</h2>
+                <ClaimCalculation :submission="submission" />
                 <dl class="grid gap-4 sm:grid-cols-2 text-sm">
-                    <div class="sm:col-span-2">
-                        <dt class="text-ori-blue-400">Research interests</dt>
-                        <dd class="break-words font-medium">{{ submission.research_interests?.join(', ') || '—' }}</dd>
-                    </div>
                     <div>
                         <dt class="text-ori-blue-400">Funding source</dt>
                         <dd class="break-words font-medium">{{ formatFundingSource(submission.funding_source, submission.funding_organization) }}</dd>

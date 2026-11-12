@@ -3,7 +3,8 @@
 namespace App\Http\Requests\Concerns;
 
 use App\Models\ResearchType;
-use App\Models\ResearchTypePointSetting;
+use App\Services\ResearchClaimCalculator;
+use Illuminate\Validation\Rule;
 
 trait CreditsSoleParticipant
 {
@@ -19,7 +20,16 @@ trait CreditsSoleParticipant
             return;
         }
 
-        $points = (float) ResearchTypePointSetting::query()->where('research_type', $type->slug)->value('points_per_output');
+        $quantity = $this->input('quantity');
+        $calculator = app(ResearchClaimCalculator::class);
+        $unit = $calculator->unit($this, $type);
+        $submission = $this->route('submission');
+        $rate = $submission && $submission->research_type === $type->slug && $submission->unit_snapshot !== null
+            ? $submission->rate_snapshot : $type->pointSetting?->points_per_output;
+        $points = round((float) $rate * ($unit !== 'output' && is_numeric($quantity) ? (float) $quantity : 1), 2);
+        if ($calculator->isLegacyEdit($this, $type) && $submission->claimed_points !== null) {
+            $points = (float) $submission->claimed_points;
+        }
 
         $this->merge([
             'authors' => [$user->name],
@@ -30,5 +40,24 @@ trait CreditsSoleParticipant
                 'allocated_points' => $points,
             ]],
         ]);
+    }
+
+    protected function quantityRules(): array
+    {
+        $type = ResearchType::query()->active()->where('slug', $this->input('research_type'))->first();
+        if (! $type) {
+            return ['nullable'];
+        }
+
+        $calculator = app(ResearchClaimCalculator::class);
+        if ($calculator->isLegacyEdit($this, $type)) {
+            return ['nullable'];
+        }
+
+        return match ($calculator->unit($this, $type)) {
+            'hour' => ['required', 'numeric', 'gt:0', 'max:999999.99', 'decimal:0,2'],
+            'day' => ['required', 'integer', 'min:1', 'max:999999'],
+            default => ['nullable', Rule::prohibitedIf(true)],
+        };
     }
 }

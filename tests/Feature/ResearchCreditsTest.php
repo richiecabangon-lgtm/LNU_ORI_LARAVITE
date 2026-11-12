@@ -1,5 +1,6 @@
 <?php
 
+use App\Enums\SubmissionStatus;
 use App\Models\AcademicYear;
 use App\Models\College;
 use App\Models\Department;
@@ -64,6 +65,236 @@ function researchCreditPayload(array $fixture, string $type = 'journal_article',
         'submit_now' => true,
     ];
 }
+
+it('calculates hourly role claims from the server rate and quantity', function () {
+    $fixture = makeResearchCreditFixture();
+    $type = ResearchType::query()->where('name', 'Program/project leader (per hour)')->firstOrFail();
+    $payload = researchCreditPayload($fixture, $type->slug, 'Hourly funded research');
+    $payload['quantity'] = 24;
+    $payload['claimed_points'] = 9999;
+    $payload['author_details'][0]['allocated_points'] = 9999;
+
+    $this->actingAs($fixture['submitter'])
+        ->post(route('faculty.submissions.store'), $payload)
+        ->assertSessionHasNoErrors();
+
+    $submission = ResearchSubmission::query()->where('title', $payload['title'])->firstOrFail();
+    expect((float) $submission->claimed_points)->toBe(24.0)
+        ->and((float) $submission->authorshipAllocations()->firstOrFail()->allocated_points)->toBe(24.0);
+});
+
+it('calculates fractional hours and whole days using the catalogue rates', function (string $name, mixed $quantity, float $expected) {
+    $fixture = makeResearchCreditFixture();
+    $type = ResearchType::query()->where('name', $name)->firstOrFail();
+    $payload = researchCreditPayload($fixture, $type->slug);
+    $payload['quantity'] = $quantity;
+    $payload['submit_now'] = false;
+
+    $this->actingAs($fixture['submitter'])->post(route('faculty.submissions.store'), $payload)->assertSessionHasNoErrors();
+    $submission = ResearchSubmission::query()->where('title', $payload['title'])->firstOrFail();
+    expect((float) $submission->claimed_points)->toBe($expected)
+        ->and((float) $submission->authorshipAllocations()->firstOrFail()->allocated_points)->toBe($expected)
+        ->and($submission->unit_snapshot)->toBe($type->unit)
+        ->and((float) $submission->quantity)->toBe((float) $quantity);
+})->with([
+    ['Program/project member (per hour)', 2.25, 1.13],
+    ['Attendance - International (per day)', 3, 60.0],
+]);
+
+it('rejects invalid quantities and output quantities', function (string $name, mixed $quantity) {
+    $fixture = makeResearchCreditFixture();
+    $type = ResearchType::query()->where('name', $name)->firstOrFail();
+    $payload = researchCreditPayload($fixture, $type->slug);
+    $payload['quantity'] = $quantity;
+    $this->actingAs($fixture['submitter'])->post(route('faculty.submissions.store'), $payload)->assertSessionHasErrors('quantity');
+    expect(ResearchSubmission::query()->count())->toBe(0);
+})->with([
+    ['Program/project leader (per hour)', null],
+    ['Program/project leader (per hour)', 0],
+    ['Program/project leader (per hour)', -1],
+    ['Program/project leader (per hour)', '1.234'],
+    ['Program/project leader (per hour)', '1e4'],
+    ['Program/project leader (per hour)', 1000000],
+    ['Attendance - International (per day)', 1.5],
+    ['Attendance - International (per day)', 0],
+    ['Patent (if granted)', 2],
+]);
+
+it('rejects computed totals above the storage limit', function () {
+    $fixture = makeResearchCreditFixture();
+    $type = ResearchType::query()->where('name', 'Program/project leader (per hour)')->firstOrFail();
+    $type->pointSetting()->update(['points_per_output' => 100]);
+    $payload = researchCreditPayload($fixture, $type->slug);
+    $payload['quantity'] = 10000;
+    $this->actingAs($fixture['submitter'])->post(route('faculty.submissions.store'), $payload)->assertSessionHasErrors();
+    expect(ResearchSubmission::query()->count())->toBe(0);
+});
+
+it('requires author allocations to match the total and keeps staff coauthors linked', function () {
+    $fixture = makeResearchCreditFixture();
+    $staff = User::factory()->coordinator()->create();
+    $type = ResearchType::query()->create(['name' => 'Hourly collaboration', 'slug' => 'hourly_collaboration', 'unit' => 'hour', 'has_authors' => true, 'is_active' => true]);
+    $type->pointSetting()->create(['points_per_output' => 10]);
+    $payload = researchCreditPayload($fixture, $type->slug);
+    $payload['quantity'] = 3;
+    $payload['submit_now'] = false;
+    $payload['authors'] = [$fixture['submitter']->name, $staff->name];
+    $payload['author_details'] = [
+        ['name' => $fixture['submitter']->name, 'email' => $fixture['submitter']->email, 'allocated_points' => 15],
+        ['name' => $staff->name, 'email' => $staff->email, 'allocated_points' => 15.01],
+    ];
+    $this->actingAs($fixture['submitter'])->post(route('faculty.submissions.store'), $payload)->assertSessionHasErrors('author_details');
+    $payload['author_details'][1]['allocated_points'] = 15;
+    $this->post(route('faculty.submissions.store'), $payload)->assertSessionHasNoErrors();
+    $submission = ResearchSubmission::query()->where('title', $payload['title'])->firstOrFail();
+    expect($submission->authorshipAllocations()->where('faculty_id', $staff->id)->exists())->toBeTrue()
+        ->and((float) $submission->claimed_points)->toBe(30.0);
+});
+
+it('retains the saved rate and unit when revising a duration claim', function () {
+    $fixture = makeResearchCreditFixture();
+    $type = ResearchType::query()->where('name', 'Program/project leader (per hour)')->firstOrFail();
+    $payload = researchCreditPayload($fixture, $type->slug);
+    $payload['quantity'] = 24;
+    $payload['submit_now'] = false;
+    $this->actingAs($fixture['submitter'])->post(route('faculty.submissions.store'), $payload)->assertSessionHasNoErrors();
+    $submission = ResearchSubmission::query()->where('title', $payload['title'])->firstOrFail();
+    $type->pointSetting()->update(['points_per_output' => 10]);
+    $type->update(['unit' => 'day']);
+    $this->get(route('faculty.submissions.edit', $submission))->assertInertia(fn (Assert $page) => $page
+        ->where('submission.research_type', $type->slug)
+        ->where('researchTypePoints.'.$type->slug, '1.00')
+        ->where('researchTypes', fn ($types) => collect($types)->firstWhere('value', $type->slug)['unit'] === 'hour'));
+    $payload['quantity'] = 2.5;
+    $payload['rate_snapshot'] = 500;
+    $payload['unit_snapshot'] = 'day';
+    $this->put(route('faculty.submissions.update', $submission), $payload)->assertSessionHasNoErrors();
+    expect($submission->fresh()->claimed_points)->toBe('2.50')
+        ->and($submission->rate_snapshot)->toBe('1.00')
+        ->and($submission->unit_snapshot)->toBe('hour');
+});
+
+it('leaves legacy rows without snapshots on their prior calculation path', function () {
+    $fixture = makeResearchCreditFixture();
+    $type = ResearchType::query()->where('name', 'Program/project leader (per hour)')->firstOrFail();
+    $submission = ResearchSubmission::query()->create([
+        'faculty_id' => $fixture['submitter']->id, 'academic_year_id' => $fixture['academicYear']->id,
+        'title' => 'Legacy role', 'research_type' => $type->slug, 'authors' => [$fixture['submitter']->name],
+        'status' => SubmissionStatus::Draft, 'claimed_points' => 1,
+    ]);
+    $payload = researchCreditPayload($fixture, $type->slug, 'Legacy role');
+    $payload['submit_now'] = false;
+    $type->pointSetting()->update(['points_per_output' => 10]);
+    $this->actingAs($fixture['submitter'])->get(route('faculty.submissions.edit', $submission))
+        ->assertInertia(fn (Assert $page) => $page->where('researchTypePoints.'.$type->slug, '10.00')->where('submission.claimed_points', '1.00'));
+    $this->actingAs($fixture['submitter'])->put(route('faculty.submissions.update', $submission), $payload)->assertSessionHasNoErrors();
+    expect($submission->fresh()->unit_snapshot)->toBeNull()->and($submission->quantity)->toBeNull()
+        ->and($submission->rate_snapshot)->toBeNull()->and($submission->claimed_points)->toBe('1.00');
+    $payload['quantity'] = 2;
+    $this->put(route('faculty.submissions.update', $submission), $payload)->assertSessionHasNoErrors();
+    $submission->refresh();
+    expect($submission->claimed_points)->toBe('20.00')->and($submission->rate_snapshot)->toBe('10.00');
+});
+
+it('uses snapshot claims for independent reviews and exposes funded-role ceiling guidance', function () {
+    $fixture = makeResearchCreditFixture();
+    $college = College::query()->create(['code' => 'QTY', 'name' => 'Quantity College']);
+    $department = Department::query()->create(['college_id' => $college->id, 'code' => 'QTY', 'name' => 'Quantity Department']);
+    $fixture['submitter']->update(['college_id' => $college->id, 'department_id' => $department->id]);
+    $coordinator = User::factory()->coordinator()->create(['department_id' => $department->id]);
+    $admin = User::factory()->admin()->create();
+    $type = ResearchType::query()->where('name', 'Program/project leader (per hour)')->firstOrFail();
+    $payload = researchCreditPayload($fixture, $type->slug);
+    $payload['quantity'] = 60;
+    $this->actingAs($fixture['submitter'])->post(route('faculty.submissions.store'), $payload)->assertSessionHasNoErrors();
+    $submission = ResearchSubmission::query()->where('title', $payload['title'])->firstOrFail();
+    $type->pointSetting()->update(['points_per_output' => 0.5]);
+    $this->get(route('faculty.submissions.show', $submission))->assertInertia(fn (Assert $page) => $page
+        ->where('submission.quantity', '60.00')->where('submission.research_type.semester_ceiling', '40.00'));
+    $evaluation = ['score' => 80, 'quality_rating' => 4, 'relevance_rating' => 4, 'documentation_rating' => 4,
+        'review_confirmed' => true, 'recommendation' => 'recommend_approval', 'remarks' => 'Reviewed', 'awarded_points' => 60.01];
+    $this->actingAs($fixture['submitter'])->post(route('coordinator.evaluations.store', $submission), $evaluation)->assertForbidden();
+    $this->actingAs($coordinator)->get(route('coordinator.evaluations.show', $submission))->assertInertia(fn (Assert $page) => $page
+        ->where('submission.research_type.semester_ceiling', '40.00'));
+    $this->post(route('coordinator.evaluations.store', $submission), $evaluation)->assertSessionHasErrors('awarded_points');
+    $evaluation['awarded_points'] = 60;
+    $this->post(route('coordinator.evaluations.store', $submission), $evaluation)->assertSessionHasNoErrors();
+    $this->actingAs($admin)->get(route('admin.approvals.show', $submission))->assertInertia(fn (Assert $page) => $page
+        ->where('submission.research_type.semester_ceiling', '40.00'));
+    $this->post(route('admin.approvals.store', $submission), ['decision' => 'approved', 'final_points' => 60.01])->assertSessionHasErrors('final_points');
+    $this->post(route('admin.approvals.store', $submission), ['decision' => 'approved', 'final_points' => 60])->assertSessionHasNoErrors();
+    expect($submission->fresh()->approval->final_points)->toBe('60.00');
+});
+
+it('allows only administrators to configure explicit units on custom types', function () {
+    $faculty = User::factory()->faculty()->create();
+    $admin = User::factory()->admin()->create();
+    $payload = ['name' => 'Custom attendance (per hour)', 'points' => 2, 'unit' => 'day'];
+    $this->actingAs($faculty)->post(route('admin.research-types.store'), $payload)->assertForbidden();
+    $this->actingAs($admin)->post(route('admin.research-types.store'), $payload)->assertSessionHasNoErrors();
+    $type = ResearchType::query()->where('name', $payload['name'])->firstOrFail();
+    expect($type->unit)->toBe('day')->and($type->semester_ceiling)->toBeNull();
+    $this->put(route('admin.research-types.update', $type->id), ['name' => $type->name, 'points' => 2, 'unit' => 'hour', 'is_active' => true])->assertSessionHasNoErrors();
+    expect($type->fresh()->unit)->toBe('hour');
+    $this->put(route('admin.research-types.update', $type->id), ['name' => $type->name, 'points' => 2, 'unit' => 'month', 'is_active' => true])->assertSessionHasErrors('unit');
+});
+
+it('provides explicit catalogue units, rates, and only funded-role ceiling references', function () {
+    $fixture = makeResearchCreditFixture();
+    $this->actingAs($fixture['submitter'])->get(route('faculty.submissions.create'))->assertInertia(fn (Assert $page) => $page
+        ->where('researchTypes', function ($types): bool {
+            $types = collect($types);
+            $hour = $types->firstWhere('label', 'Program/project member (per hour)');
+            $day = $types->firstWhere('label', 'Attendance - International (per day)');
+            $output = $types->firstWhere('label', 'Patent (if granted)');
+
+            return $hour['unit'] === 'hour' && $hour['semester_ceiling'] === '30.00'
+                && $day['unit'] === 'day' && $day['semester_ceiling'] === null
+                && $output['unit'] === 'output' && $output['semester_ceiling'] === null;
+        }));
+});
+
+it('requires submission evidence separately from coauthor authorization', function () {
+    Storage::fake('local');
+    $fixture = makeResearchCreditFixture();
+    $type = ResearchType::query()->create(['name' => 'Hourly evidence study', 'slug' => 'hourly_evidence_study', 'unit' => 'hour', 'has_authors' => true, 'is_active' => true]);
+    $type->pointSetting()->create(['points_per_output' => 10]);
+    $requirement = $type->evidenceRequirements()->create(['name' => 'Activity certificate', 'is_required' => true, 'is_active' => true]);
+    $payload = researchCreditPayload($fixture, $type->slug);
+    $payload['quantity'] = 3;
+    $payload['authors'] = [$fixture['submitter']->name, $fixture['coauthor']->name];
+    $payload['author_details'] = [
+        ['name' => $fixture['submitter']->name, 'email' => $fixture['submitter']->email, 'allocated_points' => 20],
+        ['name' => $fixture['coauthor']->name, 'email' => $fixture['coauthor']->email, 'allocated_points' => 10, 'authorization_file' => UploadedFile::fake()->create('authorization.pdf', 5, 'application/pdf')],
+    ];
+    $this->actingAs($fixture['submitter'])->post(route('faculty.submissions.store'), $payload)->assertSessionHasErrors('evidence');
+    expect(ResearchSubmission::query()->count())->toBe(0);
+    $payload['attachments'] = [UploadedFile::fake()->create('certificate.pdf', 5, 'application/pdf')];
+    $payload['attachment_requirements'] = [$requirement->id];
+    $this->post(route('faculty.submissions.store'), $payload)->assertSessionHasNoErrors();
+    $submission = ResearchSubmission::query()->where('title', $payload['title'])->firstOrFail();
+    expect($submission->attachments()->count())->toBe(1)
+        ->and($submission->authorshipAllocations()->whereNotNull('authorization_path')->count())->toBe(1);
+});
+
+it('retains the live-rate review limit for historical submissions without snapshots', function () {
+    $fixture = makeResearchCreditFixture();
+    $college = College::query()->create(['code' => 'OLD', 'name' => 'Legacy College']);
+    $department = Department::query()->create(['college_id' => $college->id, 'code' => 'OLD', 'name' => 'Legacy Department']);
+    $coordinator = User::factory()->coordinator()->create(['department_id' => $department->id]);
+    $type = ResearchType::query()->where('name', 'Program/project leader (per hour)')->firstOrFail();
+    $submission = ResearchSubmission::query()->create([
+        'faculty_id' => $fixture['submitter']->id, 'college_id' => $college->id, 'department_id' => $department->id,
+        'academic_year_id' => $fixture['academicYear']->id, 'title' => 'Historical review', 'research_type' => $type->slug,
+        'authors' => [$fixture['submitter']->name], 'status' => SubmissionStatus::Submitted, 'claimed_points' => 20,
+    ]);
+    $evaluation = ['score' => 80, 'quality_rating' => 4, 'relevance_rating' => 4, 'documentation_rating' => 4,
+        'review_confirmed' => true, 'recommendation' => 'recommend_approval', 'remarks' => 'Reviewed', 'awarded_points' => 2];
+    $this->actingAs($coordinator)->post(route('coordinator.evaluations.store', $submission), $evaluation)->assertSessionHasErrors('awarded_points');
+    $evaluation['awarded_points'] = 1;
+    $this->post(route('coordinator.evaluations.store', $submission), $evaluation)->assertSessionHasNoErrors();
+    expect($submission->fresh()->unit_snapshot)->toBeNull()->and($submission->claimed_points)->toBe('20.00');
+});
 
 it('lets only admins change the research-type point schedule', function () {
     $coordinator = User::factory()->coordinator()->create();

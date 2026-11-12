@@ -13,11 +13,11 @@ class ResearchType extends Model
 {
     use SoftDeletes;
 
-    protected $fillable = ['slug', 'name', 'description', 'category', 'has_authors', 'is_active', 'sort_order', 'updated_by'];
+    protected $fillable = ['slug', 'name', 'description', 'category', 'has_authors', 'unit', 'semester_ceiling', 'is_active', 'sort_order', 'updated_by'];
 
     protected function casts(): array
     {
-        return ['is_active' => 'boolean', 'has_authors' => 'boolean'];
+        return ['is_active' => 'boolean', 'has_authors' => 'boolean', 'semester_ceiling' => 'decimal:2'];
     }
 
     public function pointSetting(): HasOne

@@ -21,9 +21,9 @@ class StoreApprovalRequest extends FormRequest
     public function rules(): array
     {
         $submission = $this->route('submission');
-        $pointsLimit = ResearchTypePointSetting::query()
+        $pointsLimit = $submission->unit_snapshot !== null ? $submission->claimed_points : (ResearchTypePointSetting::query()
             ->where('research_type', $submission->research_type)
-            ->value('points_per_output') ?? 999999.99;
+            ->value('points_per_output') ?? 999999.99);
 
         return [
             'decision' => ['required', Rule::in(['approved', 'rejected'])],

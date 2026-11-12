@@ -6,7 +6,9 @@ import AgendaContextDisclosure from '@/Components/ORI/AgendaContextDisclosure.vu
 import AttachmentViewer from '@/Components/ORI/AttachmentViewer.vue';
 import LocalFilePreview from '@/Components/ORI/LocalFilePreview.vue';
 import AuthorizationProofLink from '@/Components/ORI/AuthorizationProofLink.vue';
-import ResearchInterestsInput from '@/Components/ORI/ResearchInterestsInput.vue';
+import ResearchTypeSelector from '@/Components/ORI/ResearchTypeSelector.vue';
+import ResearchClaimFields from '@/Components/ORI/ResearchClaimFields.vue';
+import { calculateResearchClaim, type ResearchType } from '@/Components/ORI/researchClaim';
 import { Head, router, useForm } from '@inertiajs/vue3';
 import { computed, watch } from 'vue';
 
@@ -14,19 +16,13 @@ const props = defineProps<{
     uploadLimits: { file: number; total: number };
     submission: any;
     academicYears: Array<{ id: number; name: string; is_current: boolean }>;
-    researchTypes: Array<{ value: string; label: string; group?: string; has_authors?: boolean; requirements: Array<{ id: number; name: string; is_required: boolean }> }>;
-    researchTypePoints: Record<string, number | string>;
+    researchTypes: ResearchType[];
+    researchTypePoints: Record<string, number | string | null>;
     currentFaculty: { id: number; name: string; email: string };
     facultyDirectory: Array<{ id: number; name: string; email: string; college: { name: string } | null; department: { name: string } | null }>;
     sdgs: Array<{ id: number; number: number; name: string; image_url: string | null }>;
     researchAgendas: Array<{ id: number; name: string; description: string | null; image_url: string | null }>;
 }>();
-
-const groupedResearchTypes = computed(() => {
-    const groups = new Map<string, typeof props.researchTypes>();
-    props.researchTypes.forEach((type) => groups.set(type.group ?? 'Other', [...(groups.get(type.group ?? 'Other') ?? []), type]));
-    return [...groups].map(([label, types]) => ({ label, types }));
-});
 
 type ExistingAuthor = {
     name: string;
@@ -50,6 +46,7 @@ function isLinkedLnuFaculty(author: ExistingAuthor): boolean {
 const form = useForm({
     title: props.submission.title,
     research_type: props.submission.research_type,
+    quantity: String(props.submission.quantity ?? ''),
     academic_year_id: props.submission.academic_year_id,
     abstract: props.submission.abstract || '',
     keywords: props.submission.keywords || '',
@@ -78,8 +75,10 @@ const form = useForm({
 });
 
 const authorCount = computed(() => Math.max(1, form.authors.filter((author) => author.trim()).length));
-const configuredPoints = computed(() => Number(props.researchTypePoints[form.research_type] ?? 0));
-const pointScheduleConfigured = computed(() => Object.prototype.hasOwnProperty.call(props.researchTypePoints, form.research_type));
+const selectedType = computed(() => props.researchTypes.find((type) => type.value === form.research_type));
+const legacyEdit = computed(() => form.research_type === props.submission.research_type && props.submission.unit_snapshot == null);
+const claim = computed(() => calculateResearchClaim(selectedType.value, legacyEdit.value && !form.quantity.trim() && props.submission.claimed_points != null ? props.submission.claimed_points : props.researchTypePoints[form.research_type], form.quantity, legacyEdit.value));
+const configuredPoints = computed(() => claim.value.points);
 const allocatedPointsTotal = computed(() => form.author_points.reduce((total, points) => total + Number(points || 0), 0));
 const uploadFiles = computed(() => [...form.attachments, ...form.authorization_files.filter((file): file is File => file !== null)]);
 const uploadProblem = computed(() => {
@@ -95,7 +94,7 @@ watch(() => form.research_type, () => {
     form.attachment_requirements = form.attachments.map(() => '');
     Object.keys(form.existing_attachment_requirements).forEach((id) => { form.existing_attachment_requirements[id] = ''; });
 });
-const allocationsMatch = computed(() => !involvementHasAuthors.value || Math.abs(allocatedPointsTotal.value - configuredPoints.value) <= 0.01);
+const allocationsMatch = computed(() => configuredPoints.value !== null && (!involvementHasAuthors.value || Math.abs(allocatedPointsTotal.value - configuredPoints.value) <= 0.01));
 const authorDetailsError = computed(() => (form.errors as Record<string, string>).author_details);
 
 const addAuthor = () => {
@@ -122,6 +121,7 @@ const removeAuthor = (index: number) => {
 };
 
 const setEqualAuthorShares = () => {
+    if (configuredPoints.value === null) return;
     const indices = form.authors.map((name, index) => name.trim() ? index : -1).filter((index) => index >= 0);
     if (indices.length === 0 && form.authors.length > 0) indices.push(0);
     const count = Math.max(1, indices.length);
@@ -137,6 +137,16 @@ const setEqualAuthorShares = () => {
     });
 };
 
+watch([() => form.research_type, () => form.quantity], () => {
+    if (involvementHasAuthors.value && form.authors.length === 0) {
+        form.authors = [''];
+        form.author_emails = [''];
+        form.author_institutions = [''];
+        form.author_points = [0];
+        form.authorization_files = [null];
+    }
+    setEqualAuthorShares();
+});
 watch(() => form.authors.filter((name) => name.trim()).length, setEqualAuthorShares);
 
 const matchFacultyEmail = (index: number) => {
@@ -190,6 +200,7 @@ const save = (submitNow: boolean) => {
         const interests = data.research_interests.map((interest) => interest.trim()).filter(Boolean);
         return {
             ...data,
+            quantity: selectedType.value?.unit === 'output' ? null : data.quantity || null,
             research_interests: interests.length ? interests : null,
             authors: authorDetails.map((author) => author.name),
             author_details: authorDetails,
@@ -214,19 +225,13 @@ const save = (submitNow: boolean) => {
         <form class="ori-card space-y-6 p-6" @submit.prevent="save(false)">
             <div v-if="Object.keys(form.errors).length" role="alert" class="border border-rose-200 bg-rose-50 px-4 py-3 text-sm text-rose-800"><p v-for="(message, field) in form.errors" :key="field">{{ message }}</p></div>
             <div class="grid gap-4 md:grid-cols-2">
+                <ResearchTypeSelector v-model="form.research_type" :types="researchTypes" :error="form.errors.research_type" class="md:col-span-2" />
                 <div class="md:col-span-2">
                     <label for="involvement-title" class="ori-label">Title (research, conference, event, activity, book, patent, or other)</label>
                     <input id="involvement-title" v-model="form.title" type="text" class="ori-input" required />
                     <InputError :message="form.errors.title" class="mt-1" />
                 </div>
-                <div>
-                    <label class="ori-label">Research type</label>
-                    <select v-model="form.research_type" class="ori-input" required @change="setEqualAuthorShares">
-                        <optgroup v-for="group in groupedResearchTypes" :key="group.label" :label="group.label">
-                            <option v-for="type in group.types" :key="type.value" :value="type.value">{{ type.label }}</option>
-                        </optgroup>
-                    </select>
-                </div>
+                <ResearchClaimFields v-model="form.quantity" :type="selectedType" :rate="claim.rate" :points="claim.points" :error="claim.error" :server-error="form.errors.quantity" :legacy="legacyEdit" class="md:col-span-2" />
                 <div>
                     <label class="ori-label">Academic year</label>
                     <select v-model="form.academic_year_id" class="ori-input" required>
@@ -244,7 +249,6 @@ const save = (submitNow: boolean) => {
                     <input id="submission-keywords" v-model="form.keywords" type="text" maxlength="2000" class="ori-input" />
                     <InputError :message="form.errors.keywords" class="mt-1" />
                 </div>
-                <ResearchInterestsInput v-model="form.research_interests" :errors="form.errors" id-prefix="submission-interest" class="md:col-span-2" />
                 <div>
                     <label class="ori-label" for="funding-source">Funding source</label>
                     <select id="funding-source" v-model="form.funding_source" class="ori-input" @change="form.funding_source !== 'external' && (form.funding_organization = '')">
@@ -278,11 +282,10 @@ const save = (submitNow: boolean) => {
                     <InputError :message="form.errors.research_agendas" class="mt-2" />
                 </fieldset>
                 <p v-if="!involvementHasAuthors" class="md:col-span-2 border-l-2 border-ori-yellow-400 bg-ori-blue-50 px-4 py-3 text-sm text-ori-blue-700">
-                    You are credited with {{ configuredPoints.toFixed(2) }} points for your role. Paper authors are not required for this type of involvement.
+                    You are credited with {{ configuredPoints === null ? 'the calculated' : configuredPoints.toFixed(2) }} points for your role. Paper authors are not required for this type of involvement.
                 </p>
                 <div v-else class="md:col-span-2">
                     <div class="mb-3 flex items-center justify-between gap-3"><div><label class="ori-label mb-0">Paper authors and point shares</label><p class="text-xs text-ori-blue-500">Equal shares are recalculated if the author list or research type changes.</p></div><button type="button" class="ori-btn-ghost" @click="addAuthor">Add co-author</button></div>
-                    <p v-if="!pointScheduleConfigured" class="mb-3 text-sm text-rose-700">The administrator has not configured points for this research type yet.</p>
                     <div class="space-y-4">
                         <div v-for="(_, index) in form.authors" :key="index" class="grid gap-3 border-l-2 border-ori-yellow-400 ps-4 sm:grid-cols-2">
                             <div class="sm:col-span-2 flex items-center justify-between"><span class="text-xs font-semibold uppercase text-ori-blue-500">Author {{ index + 1 }}{{ index === 0 ? ' · Lead author' : '' }}</span><button v-if="form.authors.length > 1" type="button" class="text-xs font-semibold text-rose-700" @click="removeAuthor(index)">Remove</button></div>
@@ -290,10 +293,10 @@ const save = (submitNow: boolean) => {
                             <input v-model="form.author_emails[index]" type="email" list="faculty-email-options" class="ori-input" placeholder="Faculty email (links account)" @change="matchFacultyEmail(index)" />
                             <input v-model="form.author_institutions[index]" type="text" class="ori-input" placeholder="Institution (e.g. Leyte Normal University)" />
                             <label><span class="ori-label">Allocated points</span><input v-model.number="form.author_points[index]" type="number" min="0" step="0.01" class="ori-input" /></label>
-                            <label v-if="form.author_points[index] < configuredPoints / authorCount - 0.02" class="sm:col-span-2"><span class="ori-label">Authorization proof for reduced share</span><input type="file" accept=".pdf,.jpg,.jpeg,.png" class="ori-input" @change="setAuthorizationFile($event, index)" /><LocalFilePreview :file="form.authorization_files[index]" class="mt-1 block" /><span v-if="existingAuthors[index]?.authorization_original_name" class="mt-1 block text-xs text-emerald-700">Existing proof: {{ existingAuthors[index].authorization_original_name }} <AuthorizationProofLink v-if="(existingAuthors[index] as any).id" :author="(existingAuthors[index] as any)" class="ml-2 text-xs" /></span></label>
+                            <label v-if="configuredPoints !== null && form.author_points[index] < configuredPoints / authorCount - 0.02" class="sm:col-span-2"><span class="ori-label">Authorization proof for reduced share</span><input type="file" accept=".pdf,.jpg,.jpeg,.png" class="ori-input" @change="setAuthorizationFile($event, index)" /><LocalFilePreview :file="form.authorization_files[index]" class="mt-1 block" /><span v-if="existingAuthors[index]?.authorization_original_name" class="mt-1 block text-xs text-emerald-700">Existing proof: {{ existingAuthors[index].authorization_original_name }} <AuthorizationProofLink v-if="(existingAuthors[index] as any).id" :author="(existingAuthors[index] as any)" class="ml-2 text-xs" /></span></label>
                         </div>
                     </div>
-                    <p class="mt-3 text-right text-sm" :class="allocationsMatch ? 'text-emerald-700' : 'text-rose-700'">Allocated {{ allocatedPointsTotal.toFixed(2) }} / {{ configuredPoints.toFixed(2) }} points</p>
+                    <p class="mt-3 text-right text-sm" :class="allocationsMatch ? 'text-emerald-700' : 'text-rose-700'">Allocated {{ allocatedPointsTotal.toFixed(2) }} / {{ configuredPoints === null ? 'unavailable' : configuredPoints.toFixed(2) }} points</p>
                     <datalist id="faculty-email-options"><option v-for="faculty in facultyDirectory" :key="faculty.id" :value="faculty.email">{{ faculty.name }}</option></datalist>
                     <InputError :message="form.errors.authors || authorDetailsError" class="mt-2" />
                 </div>
@@ -320,10 +323,6 @@ const save = (submitNow: boolean) => {
                 <div>
                     <label class="ori-label">Publication date</label>
                     <input v-model="form.publication_date" type="date" class="ori-input" />
-                </div>
-                <div>
-                    <label class="ori-label">Total points for this research type</label>
-                    <input :value="configuredPoints.toFixed(2)" type="text" readonly class="ori-input bg-ori-blue-50 tabular-nums" />
                 </div>
                 <div class="md:col-span-2">
                     <label class="ori-label">Remarks</label>
@@ -357,8 +356,8 @@ const save = (submitNow: boolean) => {
             </div>
 
             <div class="flex flex-wrap gap-3 border-t border-ori-blue-100 pt-5">
-                <button type="submit" class="ori-btn-ghost" :disabled="form.processing || !allocationsMatch || !pointScheduleConfigured || !!uploadProblem">Save changes</button>
-                <button type="button" class="ori-btn-accent" :disabled="form.processing || !allocationsMatch || !pointScheduleConfigured || !!uploadProblem" @click="save(true)">
+                <button type="submit" class="ori-btn-ghost" :disabled="form.processing || !allocationsMatch || !!uploadProblem">Save changes</button>
+                <button type="button" class="ori-btn-accent" :disabled="form.processing || !allocationsMatch || !!uploadProblem" @click="save(true)">
                     Save & submit
                 </button>
             </div>

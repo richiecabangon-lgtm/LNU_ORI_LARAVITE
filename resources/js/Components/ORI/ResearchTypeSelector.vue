@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import InputError from '@/Components/InputError.vue';
-import { computed, ref } from 'vue';
+import { computed, onMounted, onUnmounted, ref } from 'vue';
 
 const props = defineProps<{
     modelValue: string;
@@ -16,10 +16,32 @@ const groups = computed(() => {
 });
 const selected = computed(() => props.types.find((type) => type.value === props.modelValue));
 const openGroup = ref<string | null>(null);
+const root = ref<HTMLElement | null>(null);
+
+function closeOnOutsidePointer(event: PointerEvent) {
+    if (openGroup.value && event.target instanceof Node && !root.value?.contains(event.target)) openGroup.value = null;
+}
+
+function closeOnEscape(event: KeyboardEvent) {
+    if (openGroup.value && event.key === 'Escape' && event.target instanceof Node && root.value?.contains(event.target)) {
+        const expanded = root.value.querySelector<HTMLButtonElement>('button[aria-expanded="true"]');
+        openGroup.value = null;
+        expanded?.focus();
+    }
+}
+
+onMounted(() => {
+    document.addEventListener('pointerdown', closeOnOutsidePointer);
+    document.addEventListener('keydown', closeOnEscape);
+});
+onUnmounted(() => {
+    document.removeEventListener('pointerdown', closeOnOutsidePointer);
+    document.removeEventListener('keydown', closeOnEscape);
+});
 </script>
 
 <template>
-    <fieldset>
+    <fieldset ref="root">
         <legend class="ori-label">Research involvement type <span aria-hidden="true" class="text-rose-600">*</span><span class="sr-only"> required</span></legend>
         <p class="mb-2 text-sm text-ori-blue-700" aria-live="polite">{{ selected ? `Selected: ${selected.label}` : 'No involvement type selected.' }}</p>
         <div class="divide-y divide-ori-blue-100 border border-ori-blue-100">

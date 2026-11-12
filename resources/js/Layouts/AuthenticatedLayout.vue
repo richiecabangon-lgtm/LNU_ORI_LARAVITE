@@ -10,6 +10,8 @@ import { Link, usePage } from '@inertiajs/vue3';
 import { router } from '@inertiajs/vue3';
 
 const showingNavigationDropdown = ref(false);
+const mobileNavigation = ref<HTMLElement | null>(null);
+const mobileNavigationTrigger = ref<HTMLButtonElement | null>(null);
 const page = usePage();
 
 const user = computed(() => page.props.auth.user as any);
@@ -36,7 +38,23 @@ const currentTimeLabel = computed(() => new Intl.DateTimeFormat(undefined, {
 }).format(currentTime.value));
 let clockTimer: ReturnType<typeof setInterval> | undefined;
 
+function closeMobileNavigationOnPointer(event: PointerEvent) {
+    if (showingNavigationDropdown.value && event.target instanceof Node
+        && !mobileNavigation.value?.contains(event.target) && !mobileNavigationTrigger.value?.contains(event.target)) {
+        showingNavigationDropdown.value = false;
+    }
+}
+
+function closeMobileNavigationOnEscape(event: KeyboardEvent) {
+    if (showingNavigationDropdown.value && event.key === 'Escape') {
+        showingNavigationDropdown.value = false;
+        mobileNavigationTrigger.value?.focus();
+    }
+}
+
 onMounted(() => {
+    document.addEventListener('pointerdown', closeMobileNavigationOnPointer);
+    document.addEventListener('keydown', closeMobileNavigationOnEscape);
     clockTimer = setInterval(() => {
         currentTime.value = new Date();
     }, 1000);
@@ -44,6 +62,8 @@ onMounted(() => {
 
 onUnmounted(() => {
     if (clockTimer) clearInterval(clockTimer);
+    document.removeEventListener('pointerdown', closeMobileNavigationOnPointer);
+    document.removeEventListener('keydown', closeMobileNavigationOnEscape);
 });
 
 type NavigationItem = { label: string; route: string; match: string };
@@ -181,12 +201,13 @@ const navItems = computed(() => {
                                     Dashboard
                                 </NavLink>
                                 <Dropdown v-for="group in adminNavigationGroups" :key="group.label" align="left" width="64">
-                                    <template #trigger>
+                                    <template #trigger="{ open }">
                                         <button
                                             type="button"
                                             class="inline-flex min-h-10 items-center gap-1 border-b-2 px-2 pt-1 text-sm font-medium transition focus:outline-none focus:ring-2 focus:ring-ori-blue-300 focus:ring-offset-2"
                                             :class="isGroupActive(group) ? 'border-ori-yellow-400 font-semibold text-ori-blue-900' : 'border-transparent text-ori-blue-500 hover:border-ori-blue-200 hover:text-ori-blue-800'"
                                             aria-haspopup="true"
+                                            :aria-expanded="open"
                                         >
                                             {{ group.label }}
                                             <svg class="h-4 w-4" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" aria-hidden="true">
@@ -227,10 +248,12 @@ const navItems = computed(() => {
                         </div>
                         <div class="relative ms-3">
                             <Dropdown align="right" width="48">
-                                <template #trigger>
+                                <template #trigger="{ open }">
                                     <span class="inline-flex rounded-md">
                                         <button
                                             type="button"
+                                            aria-haspopup="true"
+                                            :aria-expanded="open"
                                             class="inline-flex items-center rounded-xl border border-ori-blue-100 bg-white px-3 py-2 text-sm font-medium text-ori-blue-700 transition hover:bg-ori-blue-50"
                                         >
                                             <img v-if="user?.profile_photo_url" :src="user.profile_photo_url" alt="" class="me-2 h-7 w-7 rounded-full object-cover" />
@@ -263,6 +286,7 @@ const navItems = computed(() => {
                         <NotificationBell class="me-2" />
                         <button type="button" class="me-2 inline-flex h-10 w-10 items-center justify-center rounded-full border border-ori-blue-100 bg-white text-ori-blue-700" :aria-label="isDark ? 'Switch to light theme' : 'Switch to dark theme'" @click="toggleTheme">{{ isDark ? '☼' : '◐' }}</button>
                         <button
+                            ref="mobileNavigationTrigger"
                             type="button"
                             @click="showingNavigationDropdown = !showingNavigationDropdown"
                             :aria-expanded="showingNavigationDropdown"
@@ -278,13 +302,14 @@ const navItems = computed(() => {
                 </div>
             </div>
 
-            <div :class="[{ block: showingNavigationDropdown, hidden: !showingNavigationDropdown }, isAdminNavigation ? 'xl:hidden' : 'lg:hidden']">
+            <div ref="mobileNavigation" :class="[{ block: showingNavigationDropdown, hidden: !showingNavigationDropdown }, isAdminNavigation ? 'xl:hidden' : 'lg:hidden']">
                 <div class="space-y-1 pb-3 pt-2">
                     <ResponsiveNavLink
                         v-for="item in navItems"
                         :key="item.route"
                         :href="route(item.route)"
                         :active="isActive(item)"
+                        @click="showingNavigationDropdown = false"
                     >
                         {{ item.label }}
                     </ResponsiveNavLink>

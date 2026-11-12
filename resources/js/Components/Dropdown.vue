@@ -14,14 +14,29 @@ const props = withDefaults(
     },
 );
 
+const root = ref<HTMLElement | null>(null);
+const trigger = ref<HTMLElement | null>(null);
+const open = ref(false);
+
 const closeOnEscape = (e: KeyboardEvent) => {
     if (open.value && e.key === 'Escape') {
         open.value = false;
+        trigger.value?.querySelector<HTMLElement>('button, a, [tabindex]')?.focus();
     }
 };
 
-onMounted(() => document.addEventListener('keydown', closeOnEscape));
-onUnmounted(() => document.removeEventListener('keydown', closeOnEscape));
+const closeOnOutsidePointer = (event: PointerEvent) => {
+    if (open.value && event.target instanceof Node && !root.value?.contains(event.target)) open.value = false;
+};
+
+onMounted(() => {
+    document.addEventListener('keydown', closeOnEscape);
+    document.addEventListener('pointerdown', closeOnOutsidePointer);
+});
+onUnmounted(() => {
+    document.removeEventListener('keydown', closeOnEscape);
+    document.removeEventListener('pointerdown', closeOnOutsidePointer);
+});
 
 const widthClass = computed(() => {
     return {
@@ -40,21 +55,13 @@ const alignmentClasses = computed(() => {
     }
 });
 
-const open = ref(false);
 </script>
 
 <template>
-    <div class="relative">
-        <div @click="open = !open">
-            <slot name="trigger" />
+    <div ref="root" class="relative">
+        <div ref="trigger" @click="open = !open">
+            <slot name="trigger" :open="open" />
         </div>
-
-        <!-- Full Screen Dropdown Overlay -->
-        <div
-            v-show="open"
-            class="fixed inset-0 z-40"
-            @click="open = false"
-        ></div>
 
         <Transition
             enter-active-class="transition ease-out duration-200"

@@ -5,10 +5,25 @@ import { router, usePage } from '@inertiajs/vue3';
 type Notice = { id: string; read_at: string | null; data: { title: string; message: string; url: string; reference_code: string }; created_at: string | null };
 const page = usePage();
 const open = ref(false);
+const root = ref<HTMLElement | null>(null);
+const trigger = ref<HTMLButtonElement | null>(null);
 const notifications = computed(() => (page.props.notifications as { items: Notice[]; unreadCount: number } | undefined) ?? { items: [], unreadCount: 0 });
 let refreshTimer: ReturnType<typeof setInterval> | undefined;
 
+function closeOnOutsidePointer(event: PointerEvent) {
+    if (open.value && event.target instanceof Node && !root.value?.contains(event.target)) open.value = false;
+}
+
+function closeOnEscape(event: KeyboardEvent) {
+    if (open.value && event.key === 'Escape') {
+        open.value = false;
+        trigger.value?.focus();
+    }
+}
+
 onMounted(() => {
+    document.addEventListener('pointerdown', closeOnOutsidePointer);
+    document.addEventListener('keydown', closeOnEscape);
     refreshTimer = setInterval(() => {
         router.reload({ only: ['notifications'] });
     }, 30000);
@@ -16,6 +31,8 @@ onMounted(() => {
 
 onUnmounted(() => {
     if (refreshTimer) clearInterval(refreshTimer);
+    document.removeEventListener('pointerdown', closeOnOutsidePointer);
+    document.removeEventListener('keydown', closeOnEscape);
 });
 
 function openNotification(item: Notice) {
@@ -30,8 +47,8 @@ function markAllRead() {
 </script>
 
 <template>
-    <div class="relative">
-        <button type="button" class="relative inline-flex h-10 w-10 items-center justify-center rounded-full border border-ori-blue-100 bg-white text-ori-blue-700 hover:bg-ori-blue-50" aria-label="Notifications" :aria-expanded="open" @click="open = !open">
+    <div ref="root" class="relative">
+        <button ref="trigger" type="button" class="relative inline-flex h-10 w-10 items-center justify-center rounded-full border border-ori-blue-100 bg-white text-ori-blue-700 hover:bg-ori-blue-50" aria-label="Notifications" :aria-expanded="open" @click="open = !open">
             <svg class="h-5 w-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true"><path stroke-linecap="round" stroke-linejoin="round" d="M18 8a6 6 0 0 0-12 0c0 7-3 7-3 9h18c0-2-3-2-3-9M10 21h4" /></svg>
             <span v-if="notifications.unreadCount" class="absolute -right-1 -top-1 min-w-5 rounded-full bg-rose-600 px-1 text-center text-[10px] font-bold leading-5 text-white">{{ notifications.unreadCount > 9 ? '9+' : notifications.unreadCount }}</span>
         </button>

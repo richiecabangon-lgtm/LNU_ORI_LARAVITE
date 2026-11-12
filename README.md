@@ -54,18 +54,6 @@ In another terminal:
 php artisan serve
 ```
 
-Open `http://localhost:8000`.
-
-## Demo accounts
-
-Password for all seeded users: `password`
-
-| Role | Email |
-|------|-------|
-| Admin | admin@lnu.edu.ph |
-| Coordinator | coordinator@lnu.edu.ph |
-| Faculty | faculty@lnu.edu.ph |
-
 ## Color palette
 
 - **Primary:** White (`#FFFFFF`)

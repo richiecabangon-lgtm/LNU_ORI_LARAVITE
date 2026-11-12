@@ -7,6 +7,7 @@ import AttachmentViewer from '@/Components/ORI/AttachmentViewer.vue';
 import AuthorizationProofLink from '@/Components/ORI/AuthorizationProofLink.vue';
 import EvidenceHistory from '@/Components/ORI/EvidenceHistory.vue';
 import ClaimCalculation from '@/Components/ORI/ClaimCalculation.vue';
+import ActivityDateDisplay from '@/Components/ORI/ActivityDateDisplay.vue';
 import { formatFundingSource } from '@/Utils/fundingSource';
 import { Head, Link, useForm } from '@inertiajs/vue3';
 
@@ -60,6 +61,7 @@ const submit = () => {
                 </div>
 
                 <ClaimCalculation :submission="submission" />
+                <ActivityDateDisplay :dates="submission.activity_dates" :legacy="submission.publication_date" :has-authors="submission.has_authors" />
                 <dl class="grid gap-4 sm:grid-cols-2 text-sm">
                     <div>
                         <dt class="text-ori-blue-400">Funding source</dt>
@@ -79,7 +81,7 @@ const submit = () => {
                     </div>
                     <div class="sm:col-span-2">
                         <dt class="text-ori-blue-400">Abstract</dt>
-                        <dd class="mt-1 whitespace-pre-wrap text-ori-blue-700">{{ submission.abstract || '—' }}</dd>
+                        <dd class="mt-1 whitespace-pre-wrap break-words text-justify text-ori-blue-700">{{ submission.abstract || '—' }}</dd>
                     </div>
                 </dl>
 

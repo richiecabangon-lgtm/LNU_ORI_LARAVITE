@@ -3,6 +3,8 @@
 namespace App\Http\Controllers;
 
 use App\Http\Requests\ProfileUpdateRequest;
+use App\Models\College;
+use App\Models\Department;
 use Illuminate\Contracts\Auth\MustVerifyEmail;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
@@ -19,14 +21,30 @@ class ProfileController extends Controller
      */
     public function edit(Request $request): Response
     {
+        $user = $request->user();
+        $user->load(['college:id,name', 'department:id,name']);
+
         return Inertia::render('Profile/Edit', [
-            'mustVerifyEmail' => $request->user() instanceof MustVerifyEmail,
+            'mustVerifyEmail' => $user instanceof MustVerifyEmail,
             'status' => session('status'),
-            'user' => $request->user()->only([
+            'user' => $user->only([
                 'id', 'name', 'email', 'email_verified_at', 'academic_rank', 'orcid_url',
                 'google_scholar_url', 'scopus_url', 'institutional_profile_url', 'profile_photo_path', 'theme_preference', 'research_interests',
+                'designation', 'college_id', 'department_id',
             ]),
-            'profilePhotoUrl' => $request->user()->profile_photo_url,
+            'assignment' => [
+                'college' => $user->college?->name,
+                'department' => $user->department?->name,
+            ],
+            'colleges' => $user->isFaculty() ? College::query()
+                ->where(fn ($query) => $query->where('is_active', true)->orWhere('id', $user->college_id))
+                ->orderBy('name')->get(['id', 'name', 'is_active']) : [],
+            'departments' => $user->isFaculty() ? Department::query()
+                ->where(fn ($query) => $query
+                    ->where(fn ($active) => $active->where('is_active', true)->whereHas('college', fn ($college) => $college->where('is_active', true)))
+                    ->orWhere('id', $user->department_id))
+                ->orderBy('name')->get(['id', 'name', 'college_id', 'is_active']) : [],
+            'profilePhotoUrl' => $user->profile_photo_url,
         ]);
     }
 

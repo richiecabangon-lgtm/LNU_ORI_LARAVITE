@@ -47,13 +47,13 @@ function archiveRange(): array
 
 it('previews inclusive report dates with the report precedence and approved status only', function () {
     $fixture = archiveFixture();
-    $start = archiveSubmission($fixture, 'Start', ['publication_date' => '2024-06-01', 'approved_at' => '2024-05-01']);
+    $start = archiveSubmission($fixture, 'Start', ['publication_date' => '2024-06-01', 'approved_at' => '2024-05-01', 'activity_dates' => ['mode' => 'single', 'date' => '2025-11-04']]);
     $end = archiveSubmission($fixture, 'End', ['publication_date' => '2024-06-30']);
-    $approved = archiveSubmission($fixture, 'Approval date', ['publication_date' => null, 'approved_at' => '2024-06-10 23:59:59', 'submitted_at' => '2024-05-01']);
+    $approved = archiveSubmission($fixture, 'Approval date', ['publication_date' => null, 'approved_at' => '2024-06-10 23:59:59', 'submitted_at' => '2024-05-01', 'activity_dates' => ['mode' => 'single', 'date' => '2025-11-04']]);
     $submitted = archiveSubmission($fixture, 'Submission date', ['publication_date' => null, 'approved_at' => null, 'submitted_at' => '2024-06-11 08:00:00']);
     $created = archiveSubmission($fixture, 'Creation date', ['publication_date' => null, 'approved_at' => null, 'submitted_at' => null]);
     $created->forceFill(['created_at' => '2024-06-12 08:00:00'])->save();
-    archiveSubmission($fixture, 'Before', ['publication_date' => '2024-05-31', 'approved_at' => '2024-06-10']);
+    $before = archiveSubmission($fixture, 'Before', ['publication_date' => '2024-05-31', 'approved_at' => '2024-06-10', 'activity_dates' => ['mode' => 'single', 'date' => '2024-06-10']]);
     archiveSubmission($fixture, 'After', ['publication_date' => '2024-07-01']);
     archiveSubmission($fixture, 'Pending', ['status' => SubmissionStatus::Submitted]);
 
@@ -61,7 +61,10 @@ it('previews inclusive report dates with the report precedence and approved stat
         ->assertOk()->assertJsonPath('start_date', '2024-06-01')->assertJsonPath('end_date', '2024-06-30');
     expect($response->json('ids'))->toBe([$start->id, $end->id, $approved->id, $submitted->id, $created->id]);
     $this->get(route('reports.fpes', ['period' => 'monthly', 'year' => 2024, 'month' => 6]))
-        ->assertInertia(fn (Assert $page) => $page->where('submissions', fn ($records) => $records->contains('id', $end->id)));
+        ->assertInertia(fn (Assert $page) => $page->where('submissions', fn ($records) => $records->contains('id', $end->id)
+            && ! $records->contains('id', $before->id)
+            && $records->firstWhere('id', $start->id)['report_date'] === '2024-06-01'
+            && $records->firstWhere('id', $approved->id)['report_date'] === '2024-06-10'));
 });
 
 it('freezes membership and filters reports and CSV while preserving role scope and restoration audit', function () {

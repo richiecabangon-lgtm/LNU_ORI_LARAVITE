@@ -5,11 +5,15 @@ import PrimaryButton from '@/Components/PrimaryButton.vue';
 import TextInput from '@/Components/TextInput.vue';
 import ResearchInterestsInput from '@/Components/ORI/ResearchInterestsInput.vue';
 import { Link, useForm, usePage } from '@inertiajs/vue3';
+import { computed } from 'vue';
 
 const props = defineProps<{
     mustVerifyEmail?: Boolean;
     status?: String;
     researchInterests: string[] | null;
+    assignment: { college: string | null; department: string | null };
+    colleges: { id: number; name: string; is_active: boolean }[];
+    departments: { id: number; name: string; college_id: number; is_active: boolean }[];
 }>();
 
 const user = usePage().props.auth.user;
@@ -17,6 +21,9 @@ const user = usePage().props.auth.user;
 const form = useForm({
     name: user.name,
     email: user.email,
+    designation: user.designation ?? '',
+    college_id: user.college_id ?? null as number | null,
+    department_id: user.department_id ?? null as number | null,
     academic_rank: user.academic_rank ?? '',
     orcid_url: user.orcid_url ?? '',
     google_scholar_url: user.google_scholar_url ?? '',
@@ -25,10 +32,16 @@ const form = useForm({
     research_interests: [...(props.researchInterests ?? [])],
 });
 
+const filteredDepartments = computed(() => props.departments.filter((department) => department.college_id === form.college_id));
+
 function saveProfile() {
-    form.transform(({ research_interests, ...data }) => ({
+    form.transform(({ research_interests, college_id, department_id, ...data }) => ({
         ...data,
-        ...(user.role === 'faculty' ? { research_interests: research_interests.map((interest) => interest.trim()).filter(Boolean) } : {}),
+        ...(user.role === 'faculty' ? {
+            college_id,
+            department_id,
+            research_interests: research_interests.map((interest) => interest.trim()).filter(Boolean),
+        } : {}),
     })).patch(route('profile.update'));
 }
 </script>
@@ -78,6 +91,36 @@ function saveProfile() {
                 />
 
                 <InputError class="mt-2" :message="form.errors.email" />
+            </div>
+
+            <div>
+                <InputLabel for="designation" value="Designation" />
+                <TextInput id="designation" type="text" class="mt-1 block w-full" v-model="form.designation" maxlength="255" />
+                <InputError class="mt-2" :message="form.errors.designation" />
+            </div>
+
+            <template v-if="user.role === 'faculty'">
+                <div>
+                    <InputLabel for="college_id" value="College" />
+                    <select id="college_id" v-model="form.college_id" @change="form.department_id = null" class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500">
+                        <option :value="null">No college</option>
+                        <option v-for="college in colleges" :key="college.id" :value="college.id">{{ college.name }}{{ college.is_active ? '' : ' (inactive)' }}</option>
+                    </select>
+                    <InputError class="mt-2" :message="form.errors.college_id" />
+                </div>
+                <div>
+                    <InputLabel for="department_id" value="Department" />
+                    <select id="department_id" v-model="form.department_id" :disabled="form.college_id === null" class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 disabled:bg-gray-100">
+                        <option :value="null">No department</option>
+                        <option v-for="department in filteredDepartments" :key="department.id" :value="department.id">{{ department.name }}{{ department.is_active ? '' : ' (inactive)' }}</option>
+                    </select>
+                    <InputError class="mt-2" :message="form.errors.department_id" />
+                </div>
+            </template>
+            <div v-else>
+                <h3 class="text-sm font-medium text-gray-700">College and department</h3>
+                <p class="mt-1 text-sm text-gray-900">{{ assignment.college || 'No college assigned' }} / {{ assignment.department || 'No department assigned' }}</p>
+                <p class="mt-1 text-sm text-gray-600">An administrator manages your college and department assignment. Contact an administrator to request a change.</p>
             </div>
 
             <div>

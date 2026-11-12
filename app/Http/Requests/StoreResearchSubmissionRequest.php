@@ -3,6 +3,7 @@
 namespace App\Http\Requests;
 
 use App\Http\Requests\Concerns\CreditsSoleParticipant;
+use App\Http\Requests\Concerns\ValidatesActivityDates;
 use App\Models\ResearchSubmission;
 use App\Models\ResearchType;
 use App\Services\ResearchSubmissionDuplicateService;
@@ -13,6 +14,7 @@ use Illuminate\Validation\Validator;
 class StoreResearchSubmissionRequest extends FormRequest
 {
     use CreditsSoleParticipant;
+    use ValidatesActivityDates;
 
     public function authorize(): bool
     {
@@ -25,6 +27,7 @@ class StoreResearchSubmissionRequest extends FormRequest
     public function rules(): array
     {
         return [
+            ...$this->activityDateRules(),
             'title' => ['required', 'string', 'max:500'],
             'research_type' => ['required', Rule::exists('research_types', 'slug')->where('is_active', true)],
             'quantity' => $this->quantityRules(),

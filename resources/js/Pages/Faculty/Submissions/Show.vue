@@ -6,6 +6,7 @@ import AttachmentViewer from '@/Components/ORI/AttachmentViewer.vue';
 import AuthorizationProofLink from '@/Components/ORI/AuthorizationProofLink.vue';
 import EvidenceHistory from '@/Components/ORI/EvidenceHistory.vue';
 import ClaimCalculation from '@/Components/ORI/ClaimCalculation.vue';
+import ActivityDateDisplay from '@/Components/ORI/ActivityDateDisplay.vue';
 import { formatFundingSource } from '@/Utils/fundingSource';
 import { Head, Link, router, usePage } from '@inertiajs/vue3';
 
@@ -85,6 +86,7 @@ const destroy = () => {
                 </div>
 
                 <ClaimCalculation :submission="submission" />
+                <ActivityDateDisplay :dates="submission.activity_dates" :legacy="submission.publication_date" :has-authors="submission.has_authors" />
                 <dl class="grid gap-4 sm:grid-cols-2">
                     <div>
                         <dt class="text-xs font-semibold uppercase tracking-wide text-ori-blue-400">Funding source</dt>
@@ -119,7 +121,7 @@ const destroy = () => {
 
                 <div>
                     <h3 class="text-sm font-semibold text-ori-blue-800">Abstract</h3>
-                    <p class="mt-2 whitespace-pre-wrap text-sm leading-relaxed text-ori-blue-700">
+                    <p class="mt-2 whitespace-pre-wrap break-words text-justify text-sm leading-relaxed text-ori-blue-700">
                         {{ submission.abstract || 'No abstract provided.' }}
                     </p>
                 </div>

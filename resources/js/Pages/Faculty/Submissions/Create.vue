@@ -6,6 +6,8 @@ import AgendaContextDisclosure from '@/Components/ORI/AgendaContextDisclosure.vu
 import LocalFilePreview from '@/Components/ORI/LocalFilePreview.vue';
 import ResearchTypeSelector from '@/Components/ORI/ResearchTypeSelector.vue';
 import ResearchClaimFields from '@/Components/ORI/ResearchClaimFields.vue';
+import ActivityDateFields from '@/Components/ORI/ActivityDateFields.vue';
+import { activityDateInput, activityDatePayload } from '@/Components/ORI/activityDates';
 import { calculateResearchClaim, type ResearchType } from '@/Components/ORI/researchClaim';
 import { Head, useForm } from '@inertiajs/vue3';
 import axios from 'axios';
@@ -47,6 +49,7 @@ const form = useForm({
     issn_isbn: '',
     indexing: '',
     publication_date: '',
+    activity_dates: activityDateInput(null),
     claimed_points: '',
     faculty_remarks: '',
     attachments: [] as File[],
@@ -55,6 +58,8 @@ const form = useForm({
 });
 
 const extractingPaper = ref(false);
+const hasEnteredPublicationDate = ref(false);
+watch(() => form.publication_date, (date) => { if (date) hasEnteredPublicationDate.value = true; });
 const extractionMessage = ref('');
 const savingAction = ref<'draft' | 'submit' | null>(null);
 const authorCount = computed(() => Math.max(1, form.authors.filter((author) => author.trim()).length));
@@ -70,6 +75,9 @@ const uploadProblem = computed(() => {
     return total > props.uploadLimits.total * 0.95 ? `The selected files total ${(total / 1048576).toFixed(1)} MB, above the ${megabytes(props.uploadLimits.total)} limit for one submission. Remove some files or save the draft first and add the rest later.` : '';
 });
 const involvementHasAuthors = computed(() => props.researchTypes.find((type) => type.value === form.research_type)?.has_authors ?? true);
+watch([() => form.research_type, () => form.activity_dates], () => {
+    Object.keys(form.errors).filter((key) => key.startsWith('activity_dates')).forEach((key) => { delete (form.errors as Record<string, string>)[key]; });
+}, { deep: true });
 const requirements = computed(() => props.researchTypes.find((type) => type.value === form.research_type)?.requirements ?? []);
 watch(() => form.research_type, () => { form.attachment_requirements = form.attachments.map(() => ''); });
 const allocatedPointsTotal = computed(() => form.author_points.reduce((total, points) => total + Number(points || 0), 0));
@@ -179,6 +187,11 @@ const onFiles = async (event: Event) => {
     input.value = '';
 
     const requestId = ++extractionRequestId;
+    if (!selectedType.value || !involvementHasAuthors.value) {
+        extractionMessage.value = '';
+        extractingPaper.value = false;
+        return;
+    }
     const paper = picked.find((file) => /\.(pdf|docx|png|jpe?g|webp)$/i.test(file.name));
     if (!paper) {
         extractionMessage.value = form.attachments.length
@@ -195,8 +208,9 @@ const onFiles = async (event: Event) => {
     upload.append('paper', paper);
 
     try {
+        const extractionType = form.research_type;
         const { data } = await axios.post(route('faculty.submissions.extract-metadata'), upload);
-        if (requestId !== extractionRequestId) return;
+        if (requestId !== extractionRequestId || extractionType !== form.research_type) return;
 
         const fields = data.fields as Record<string, string | string[]>;
         if (!form.title.trim() && typeof fields.title === 'string') form.title = fields.title;
@@ -233,6 +247,10 @@ const onFiles = async (event: Event) => {
 };
 
 const save = (submitNow: boolean) => {
+    if (involvementHasAuthors.value && activityDatePayload(form.activity_dates)) {
+        form.setError('activity_dates', 'Switch back to a role-based type or clear the activity dates before saving.');
+        return;
+    }
     savingAction.value = submitNow ? 'submit' : 'draft';
     form.submit_now = submitNow;
     form.transform((data) => {
@@ -251,8 +269,10 @@ const save = (submitNow: boolean) => {
             }));
 
         const interests = data.research_interests.map((interest) => interest.trim()).filter(Boolean);
+        const { activity_dates, ...otherData } = data;
         return {
-            ...data,
+            ...otherData,
+            ...(!involvementHasAuthors.value ? { activity_dates: activityDatePayload(activity_dates) } : {}),
             quantity: selectedType.value?.unit === 'output' ? null : data.quantity || null,
             research_interests: interests.length ? interests : null,
             authors: authorDetails.map((author) => author.name),
@@ -306,12 +326,12 @@ const save = (submitNow: boolean) => {
                     <InputError :message="form.errors.academic_year_id" class="mt-1" />
                 </div>
 
-                <div class="md:col-span-2">
+                <div v-if="(selectedType && involvementHasAuthors) || form.abstract" class="md:col-span-2">
                     <label class="ori-label">Abstract / summary</label>
-                    <textarea v-model="form.abstract" rows="4" class="ori-input" />
+                    <textarea v-model="form.abstract" rows="4" class="ori-input text-justify" />
                 </div>
 
-                <div class="md:col-span-2">
+                <div v-if="(selectedType && involvementHasAuthors) || form.keywords" class="md:col-span-2">
                     <label class="ori-label" for="submission-keywords">Keywords</label>
                     <input id="submission-keywords" v-model="form.keywords" type="text" maxlength="2000" class="ori-input" />
                     <InputError :message="form.errors.keywords" class="mt-1" />
@@ -401,26 +421,27 @@ const save = (submitNow: boolean) => {
                     <label class="ori-label">Venue / Journal / Conference</label>
                     <input v-model="form.venue" type="text" class="ori-input" />
                 </div>
-                <div>
+                <div v-if="(selectedType && involvementHasAuthors) || form.publisher">
                     <label class="ori-label">Publisher</label>
                     <input v-model="form.publisher" type="text" class="ori-input" />
                 </div>
-                <div>
+                <div v-if="(selectedType && involvementHasAuthors) || form.doi">
                     <label class="ori-label">DOI</label>
                     <input v-model="form.doi" type="text" class="ori-input" />
                 </div>
-                <div>
+                <div v-if="(selectedType && involvementHasAuthors) || form.issn_isbn">
                     <label class="ori-label">ISSN / ISBN</label>
                     <input v-model="form.issn_isbn" type="text" class="ori-input" />
                 </div>
-                <div>
+                <div v-if="(selectedType && involvementHasAuthors) || form.indexing">
                     <label class="ori-label">Indexing</label>
                     <input v-model="form.indexing" type="text" class="ori-input" placeholder="Scopus, WoS, CHED, etc." />
                 </div>
-                <div>
-                    <label class="ori-label">Publication date</label>
+                <div v-if="(selectedType && involvementHasAuthors) || hasEnteredPublicationDate">
+                    <label class="ori-label">{{ involvementHasAuthors ? 'Publication date' : 'Legacy single activity date' }}</label>
                     <input v-model="form.publication_date" type="date" class="ori-input" />
                 </div>
+                <ActivityDateFields v-if="selectedType && !involvementHasAuthors" v-model="form.activity_dates" :errors="form.errors" class="md:col-span-2" />
                 <div class="md:col-span-2">
                     <label class="ori-label">Remarks</label>
                     <textarea v-model="form.faculty_remarks" rows="3" class="ori-input" />
@@ -429,7 +450,7 @@ const save = (submitNow: boolean) => {
                     <label class="ori-label" for="evidence-files">Evidence attachments</label>
                     <ul v-if="requirements.length" class="mb-3 space-y-1 text-sm text-ori-blue-700"><li v-for="requirement in requirements" :key="requirement.id">{{ requirement.name }} <span class="text-xs">({{ requirement.is_required ? 'Required for submission' : 'Optional' }})</span></li></ul>
                     <input id="evidence-files" type="file" multiple accept=".pdf,.doc,.docx,.jpg,.jpeg,.png,.webp" class="ori-input" @change="onFiles" />
-                    <p class="mt-1 text-xs text-ori-blue-500">Add as many files as needed (up to 20), selecting more than once if you wish. PDF, DOC, DOCX, JPG, PNG, or WebP up to 10MB each. The first supported paper is analyzed locally for suggested details.</p>
+                    <p class="mt-1 text-xs text-ori-blue-500">Add as many files as needed (up to 20), selecting more than once if you wish. PDF, DOC, DOCX, JPG, PNG, or WebP up to 10MB each.<span v-if="selectedType && involvementHasAuthors"> The first supported paper is analyzed locally for suggested details.</span></p>
                     <ul v-if="form.attachments.length" class="mt-3 divide-y divide-ori-blue-100 border-y border-ori-blue-100 text-sm">
                         <li v-for="(file, index) in form.attachments" :key="`${file.name}-${file.size}`" class="flex flex-wrap items-center justify-between gap-3 py-2">
                             <span class="min-w-0 break-words">{{ file.name }} <span class="text-xs text-ori-blue-400">{{ (file.size / 1048576).toFixed(2) }} MB</span></span>

@@ -8,6 +8,8 @@ import LocalFilePreview from '@/Components/ORI/LocalFilePreview.vue';
 import AuthorizationProofLink from '@/Components/ORI/AuthorizationProofLink.vue';
 import ResearchTypeSelector from '@/Components/ORI/ResearchTypeSelector.vue';
 import ResearchClaimFields from '@/Components/ORI/ResearchClaimFields.vue';
+import ActivityDateFields from '@/Components/ORI/ActivityDateFields.vue';
+import { activityDateInput, activityDatePayload } from '@/Components/ORI/activityDates';
 import { calculateResearchClaim, type ResearchType } from '@/Components/ORI/researchClaim';
 import { Head, router, useForm } from '@inertiajs/vue3';
 import { computed, watch } from 'vue';
@@ -66,6 +68,7 @@ const form = useForm({
     issn_isbn: props.submission.issn_isbn || '',
     indexing: props.submission.indexing || '',
     publication_date: props.submission.publication_date?.substring?.(0, 10) || props.submission.publication_date || '',
+    activity_dates: activityDateInput(props.submission.activity_dates),
     claimed_points: props.submission.claimed_points || '',
     faculty_remarks: props.submission.faculty_remarks || '',
     attachments: [] as File[],
@@ -89,6 +92,9 @@ const uploadProblem = computed(() => {
     return total > props.uploadLimits.total * 0.95 ? `The selected files total ${(total / 1048576).toFixed(1)} MB, above the ${megabytes(props.uploadLimits.total)} limit for one submission. Remove some files or save the draft first and add the rest later.` : '';
 });
 const involvementHasAuthors = computed(() => props.researchTypes.find((type) => type.value === form.research_type)?.has_authors ?? true);
+watch([() => form.research_type, () => form.activity_dates], () => {
+    Object.keys(form.errors).filter((key) => key.startsWith('activity_dates')).forEach((key) => { delete (form.errors as Record<string, string>)[key]; });
+}, { deep: true });
 const requirements = computed(() => props.researchTypes.find((type) => type.value === form.research_type)?.requirements ?? []);
 watch(() => form.research_type, () => {
     form.attachment_requirements = form.attachments.map(() => '');
@@ -184,6 +190,10 @@ const removeSavedAttachment = (attachment: { id: number; original_name: string }
 };
 
 const save = (submitNow: boolean) => {
+    if (involvementHasAuthors.value && JSON.stringify(activityDatePayload(form.activity_dates)) !== JSON.stringify(activityDatePayload(activityDateInput(props.submission.activity_dates)))) {
+        form.setError('activity_dates', 'Switch back to a role-based type to save or discard your activity-date changes.');
+        return;
+    }
     form.submit_now = submitNow;
     form.transform((data) => {
         const authorDetails = data.authors.map((name, index) => ({
@@ -198,8 +208,10 @@ const save = (submitNow: boolean) => {
         }));
 
         const interests = data.research_interests.map((interest) => interest.trim()).filter(Boolean);
+        const { activity_dates, ...otherData } = data;
         return {
-            ...data,
+            ...otherData,
+            ...(!involvementHasAuthors.value ? { activity_dates: activityDatePayload(activity_dates) } : {}),
             quantity: selectedType.value?.unit === 'output' ? null : data.quantity || null,
             research_interests: interests.length ? interests : null,
             authors: authorDetails.map((author) => author.name),
@@ -240,11 +252,11 @@ const save = (submitNow: boolean) => {
                         </option>
                     </select>
                 </div>
-                <div class="md:col-span-2">
+                <div v-if="(selectedType && involvementHasAuthors) || form.abstract" class="md:col-span-2">
                     <label class="ori-label">Abstract / summary</label>
-                    <textarea v-model="form.abstract" rows="4" class="ori-input" />
+                    <textarea v-model="form.abstract" rows="4" class="ori-input text-justify" />
                 </div>
-                <div class="md:col-span-2">
+                <div v-if="(selectedType && involvementHasAuthors) || form.keywords" class="md:col-span-2">
                     <label class="ori-label" for="submission-keywords">Keywords</label>
                     <input id="submission-keywords" v-model="form.keywords" type="text" maxlength="2000" class="ori-input" />
                     <InputError :message="form.errors.keywords" class="mt-1" />
@@ -304,26 +316,27 @@ const save = (submitNow: boolean) => {
                     <label class="ori-label">Venue</label>
                     <input v-model="form.venue" type="text" class="ori-input" />
                 </div>
-                <div>
+                <div v-if="(selectedType && involvementHasAuthors) || form.publisher">
                     <label class="ori-label">Publisher</label>
                     <input v-model="form.publisher" type="text" class="ori-input" />
                 </div>
-                <div>
+                <div v-if="(selectedType && involvementHasAuthors) || form.doi">
                     <label class="ori-label">DOI</label>
                     <input v-model="form.doi" type="text" class="ori-input" />
                 </div>
-                <div>
+                <div v-if="(selectedType && involvementHasAuthors) || form.issn_isbn">
                     <label class="ori-label">ISSN / ISBN</label>
                     <input v-model="form.issn_isbn" type="text" class="ori-input" />
                 </div>
-                <div>
+                <div v-if="(selectedType && involvementHasAuthors) || form.indexing">
                     <label class="ori-label">Indexing</label>
                     <input v-model="form.indexing" type="text" class="ori-input" />
                 </div>
-                <div>
-                    <label class="ori-label">Publication date</label>
+                <div v-if="involvementHasAuthors || form.publication_date || submission.publication_date">
+                    <label class="ori-label">{{ involvementHasAuthors ? 'Publication date' : 'Legacy single activity date' }}</label>
                     <input v-model="form.publication_date" type="date" class="ori-input" />
                 </div>
+                <ActivityDateFields v-if="selectedType && !involvementHasAuthors" v-model="form.activity_dates" :errors="form.errors" class="md:col-span-2" />
                 <div class="md:col-span-2">
                     <label class="ori-label">Remarks</label>
                     <textarea v-model="form.faculty_remarks" rows="3" class="ori-input" />

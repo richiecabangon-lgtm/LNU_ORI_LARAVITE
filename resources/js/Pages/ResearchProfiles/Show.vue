@@ -79,7 +79,7 @@ function displayProfileUrl(value: string): string {
                         <div v-if="item.research_agendas?.length" class="mt-2 flex flex-wrap gap-2"><span v-for="agenda in item.research_agendas" :key="agenda.name" class="inline-flex items-center gap-2 border border-ori-blue-100 px-2 py-1 text-xs text-ori-blue-700"><img v-if="agenda.image_url" :src="agenda.image_url" :alt="`${agenda.name} image`" class="h-7 w-7 rounded object-cover" /><span>{{ agenda.name }}</span></span></div>
                     </div>
                     <div class="text-left sm:text-right"><span class="block text-xs uppercase text-ori-blue-400">Allocated points</span><strong class="text-lg tabular-nums text-ori-blue-900">{{ item.faculty_points.toFixed(2) }}</strong></div>
-                    <p v-if="item.abstract" class="whitespace-pre-wrap text-sm leading-relaxed text-ori-blue-700 sm:col-span-2">{{ item.abstract }}</p>
+                    <p v-if="item.abstract" class="whitespace-pre-wrap break-words text-justify text-sm leading-relaxed text-ori-blue-700 sm:col-span-2">{{ item.abstract }}</p>
                 </article>
                 <p v-if="submissions.length === 0" class="py-12 text-center text-sm text-ori-blue-500">No submitted research outputs are listed on this profile yet.</p>
             </div>

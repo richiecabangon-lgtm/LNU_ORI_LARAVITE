@@ -7,6 +7,7 @@ import AttachmentViewer from '@/Components/ORI/AttachmentViewer.vue';
 import AuthorizationProofLink from '@/Components/ORI/AuthorizationProofLink.vue';
 import EvidenceHistory from '@/Components/ORI/EvidenceHistory.vue';
 import ClaimCalculation from '@/Components/ORI/ClaimCalculation.vue';
+import ActivityDateDisplay from '@/Components/ORI/ActivityDateDisplay.vue';
 import { formatFundingSource } from '@/Utils/fundingSource';
 import { Head, Link, useForm } from '@inertiajs/vue3';
 import { computed, ref, watch } from 'vue';
@@ -93,6 +94,7 @@ const submit = () => {
             <section class="ori-card space-y-4 p-6 lg:col-span-3">
                 <h2 class="font-display text-xl font-semibold">Submission dossier</h2>
                 <ClaimCalculation :submission="submission" />
+                <ActivityDateDisplay :dates="submission.activity_dates" :legacy="submission.publication_date" :has-authors="submission.has_authors" />
                 <dl class="grid gap-4 sm:grid-cols-2 text-sm">
                     <div>
                         <dt class="text-ori-blue-400">Funding source</dt>
@@ -124,7 +126,7 @@ const submit = () => {
                     </div>
                     <div class="sm:col-span-2">
                         <dt class="text-ori-blue-400">Abstract</dt>
-                        <dd class="mt-1 whitespace-pre-wrap text-ori-blue-700">{{ submission.abstract || '—' }}</dd>
+                        <dd class="mt-1 whitespace-pre-wrap break-words text-justify text-ori-blue-700">{{ submission.abstract || '—' }}</dd>
                     </div>
                 </dl>
                 <div v-if="submission.sdgs?.length || submission.research_agendas?.length" class="grid gap-4 border-t border-ori-blue-100 pt-4 sm:grid-cols-2 text-sm"><div v-if="submission.sdgs?.length"><strong>SDGs</strong><div class="mt-2 flex flex-wrap gap-2"><span v-for="item in submission.sdgs" :key="item.number" class="inline-flex items-center gap-2 border border-ori-blue-100 px-2 py-1"><img v-if="item.image_url" :src="item.image_url" :alt="`SDG ${item.number}: ${item.name}`" class="h-8 w-8 rounded object-cover" /><span>SDG {{ item.number }} · {{ item.name }}</span></span></div></div><div v-if="submission.research_agendas?.length"><strong>Research agendas</strong><div class="mt-2 flex flex-wrap gap-2"><span v-for="item in submission.research_agendas" :key="item.id" class="inline-flex items-center gap-2 border border-ori-blue-100 px-2 py-1"><img v-if="item.image_url" :src="item.image_url" :alt="`${item.name} image`" class="h-8 w-8 rounded object-cover" /><span>{{ item.name }}</span></span></div></div></div>

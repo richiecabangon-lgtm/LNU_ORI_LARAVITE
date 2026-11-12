@@ -142,6 +142,9 @@ class ResearchSubmissionController extends Controller
     {
         $user = $request->user();
         $data = $request->validated();
+        if (($data['activity_dates']['mode'] ?? null) === 'multiple') {
+            sort($data['activity_dates']['dates']);
+        }
 
         $claim = app(ResearchClaimCalculator::class)->calculate($request, ResearchType::query()->where('slug', $data['research_type'])->firstOrFail());
         $points = $claim['claimed_points'];
@@ -246,6 +249,9 @@ class ResearchSubmissionController extends Controller
     public function update(UpdateResearchSubmissionRequest $request, ResearchSubmission $submission): RedirectResponse
     {
         $data = $request->validated();
+        if (($data['activity_dates']['mode'] ?? null) === 'multiple') {
+            sort($data['activity_dates']['dates']);
+        }
 
         if (array_key_exists('funding_source', $data) && ! array_key_exists('funding_organization', $data)) {
             $data['funding_organization'] = null;

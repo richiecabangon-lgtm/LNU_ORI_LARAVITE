@@ -11,6 +11,9 @@ defineProps<{
     status?: string;
     profilePhotoUrl: string | null;
     user: { theme_preference?: 'light' | 'dark'; research_interests: string[] | null };
+    assignment: { college: string | null; department: string | null };
+    colleges: { id: number; name: string; is_active: boolean }[];
+    departments: { id: number; name: string; college_id: number; is_active: boolean }[];
 }>();
 </script>
 
@@ -35,6 +38,9 @@ defineProps<{
                         :must-verify-email="mustVerifyEmail"
                         :status="status"
                         :research-interests="user.research_interests"
+                        :assignment="assignment"
+                        :colleges="colleges"
+                        :departments="departments"
                         class="max-w-xl"
                     />
                 </div>

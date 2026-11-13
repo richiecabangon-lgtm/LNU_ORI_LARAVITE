@@ -10,6 +10,7 @@ use Illuminate\Http\Request;
 use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\Storage;
 use Illuminate\Validation\Rule;
+use Illuminate\Validation\ValidationException;
 use Inertia\Inertia;
 use Inertia\Response;
 
@@ -20,12 +21,17 @@ class NewsPostController extends Controller
         abort_unless($request->user()->isAdmin(), 403);
 
         return Inertia::render('Admin/News/Index', [
-            'posts' => NewsPost::query()->withCount('attachments')->latest('id')->get()
+            'posts' => NewsPost::query()
+                ->with(['attachments' => fn ($query) => $query->where('is_gallery', true)->orderBy('id')])
+                ->withCount(['attachments as attachments_count' => fn ($query) => $query->where('is_gallery', false)])
+                ->latest('id')->get()
                 ->map(fn (NewsPost $post): array => [
                     'id' => $post->id,
                     'title' => $post->title,
                     'category' => $post->category,
-                    'cover_url' => $post->cover_url,
+                    'cover_url' => $post->cover_url ?? ($post->attachments->first()
+                        ? route('news.attachments.view', [$post->id, $post->attachments->first()->id])
+                        : null),
                     'summary' => $post->summary,
                     'is_published' => $post->is_published,
                     'published_at' => $post->published_at?->toIso8601String(),
@@ -47,12 +53,14 @@ class NewsPostController extends Controller
         abort_unless($request->user()->isAdmin(), 403);
 
         $data = $this->validated($request);
+        $this->ensureGalleryCapacity(null, $data);
         $post = NewsPost::query()->create([
             ...$this->postAttributes($data),
             'created_by' => $request->user()->id,
         ]);
         $this->storeCover($request, $post);
         $this->storeAttachments($request, $post);
+        $this->storeGalleryImages($request, $post, $data);
 
         return to_route('admin.news.index')->with('success', 'News post saved.');
     }
@@ -69,10 +77,17 @@ class NewsPostController extends Controller
                 'category' => $news->category,
                 'cover_url' => $news->cover_url,
                 'cover_image_alt' => $news->cover_image_alt,
+                'gallery_images' => $news->attachments()->where('is_gallery', true)->orderBy('id')->get()
+                    ->map(fn (NewsAttachment $image): array => [
+                        'id' => $image->id,
+                        'original_name' => $image->original_name,
+                        'alt_text' => $image->alt_text,
+                        'url' => route('news.attachments.view', [$news->id, $image->id]),
+                    ])->all(),
                 'summary' => $news->summary,
                 'body' => $news->body,
                 'is_published' => $news->is_published,
-                'attachments' => $news->attachments->map(fn (NewsAttachment $attachment): array => [
+                'attachments' => $news->attachments()->where('is_gallery', false)->get()->map(fn (NewsAttachment $attachment): array => [
                     'id' => $attachment->id,
                     'original_name' => $attachment->original_name,
                     'size' => $attachment->size,
@@ -86,6 +101,7 @@ class NewsPostController extends Controller
         abort_unless($request->user()->isAdmin(), 403);
 
         $data = $this->validated($request);
+        $this->ensureGalleryCapacity($news, $data);
         $attributes = $this->postAttributes($data);
         if ($news->published_at !== null && $attributes['is_published']) {
             $attributes['published_at'] = $news->published_at;
@@ -93,6 +109,7 @@ class NewsPostController extends Controller
         $news->update($attributes);
         $this->storeCover($request, $news);
         $this->storeAttachments($request, $news);
+        $this->storeGalleryImages($request, $news, $data);
 
         return to_route('admin.news.index')->with('success', 'News post updated.');
     }
@@ -118,7 +135,7 @@ class NewsPostController extends Controller
         Storage::disk($attachment->disk)->delete($attachment->path);
         $attachment->delete();
 
-        return back()->with('success', 'Document removed.');
+        return back()->with('success', $attachment->is_gallery ? 'Gallery image removed.' : 'Document removed.');
     }
 
     /**
@@ -137,7 +154,29 @@ class NewsPostController extends Controller
             'is_published' => ['required', 'boolean'],
             'attachments' => ['nullable', 'array', 'max:10'],
             'attachments.*' => ['file', 'mimes:pdf,doc,docx,xls,xlsx,ppt,pptx,png,jpg,jpeg', 'max:20480'],
+            'gallery_images' => ['nullable', 'array', 'max:10'],
+            'gallery_images.*' => ['image', 'mimes:jpg,jpeg,png,webp', 'max:5120', 'dimensions:min_width=600,min_height=300'],
+            'gallery_image_alts' => ['required_with:gallery_images', 'array', 'max:10'],
+            'gallery_image_alts.*' => ['required', 'string', 'max:255'],
         ]);
+    }
+
+    /**
+     * @param  array<string, mixed>  $data
+     */
+    private function ensureGalleryCapacity(?NewsPost $post, array $data): void
+    {
+        $images = $data['gallery_images'] ?? [];
+        $alts = $data['gallery_image_alts'] ?? [];
+
+        if (count($images) !== count($alts)) {
+            throw ValidationException::withMessages(['gallery_image_alts' => 'Add a description for every gallery image.']);
+        }
+
+        $existingCount = $post?->attachments()->where('is_gallery', true)->count() ?? 0;
+        if ($existingCount + count($images) > 10) {
+            throw ValidationException::withMessages(['gallery_images' => 'A news post can have up to 10 gallery images.']);
+        }
     }
 
     /**
@@ -183,6 +222,24 @@ class NewsPostController extends Controller
                 'original_name' => $file->getClientOriginalName(),
                 'mime_type' => $file->getClientMimeType(),
                 'size' => $file->getSize(),
+            ]);
+        }
+    }
+
+    /**
+     * @param  array<string, mixed>  $data
+     */
+    private function storeGalleryImages(Request $request, NewsPost $post, array $data): void
+    {
+        foreach ($request->file('gallery_images', []) as $index => $file) {
+            $post->attachments()->create([
+                'disk' => 'local',
+                'path' => $file->store('news/'.$post->id.'/gallery', 'local'),
+                'original_name' => $file->getClientOriginalName(),
+                'mime_type' => $file->getMimeType(),
+                'size' => $file->getSize(),
+                'is_gallery' => true,
+                'alt_text' => $data['gallery_image_alts'][$index],
             ]);
         }
     }

@@ -110,6 +110,62 @@ it('publishes a news post with a cover image and requires a description for it',
     expect($post->fresh()->cover_image_path)->toBeNull();
 });
 
+it('publishes gallery photos separately from document attachments', function () {
+    Storage::fake('local');
+    $admin = User::factory()->admin()->create();
+
+    $this->actingAs($admin)->post(route('admin.news.store'), [
+        'title' => 'Research celebration',
+        'category' => 'Achievement',
+        'body' => 'The university celebrated the research team.',
+        'is_published' => true,
+        'gallery_images' => [
+            UploadedFile::fake()->image('award.png', 800, 600),
+            UploadedFile::fake()->image('team.jpg', 900, 600),
+        ],
+        'gallery_image_alts' => ['The team receiving the award', 'Researchers celebrating on stage'],
+        'attachments' => [UploadedFile::fake()->create('program.pdf', 20, 'application/pdf')],
+    ])->assertRedirect(route('admin.news.index'));
+
+    $post = NewsPost::query()->with('attachments')->firstOrFail();
+    $galleryImages = $post->attachments->where('is_gallery', true)->values();
+    expect($galleryImages)->toHaveCount(2);
+    expect($galleryImages[0]->alt_text)->toBe('The team receiving the award');
+    expect($post->attachments->where('is_gallery', false))->toHaveCount(1);
+    Storage::disk('local')->assertExists($galleryImages[0]->path);
+
+    $faculty = User::factory()->faculty()->create();
+    $this->actingAs($faculty)->get(route('news.show', $post))
+        ->assertInertia(fn ($page) => $page
+            ->has('post.gallery_images', 2)
+            ->where('post.gallery_images.0.alt_text', 'The team receiving the award')
+            ->has('post.attachments', 1));
+    $this->actingAs($faculty)->get(route('news.attachments.view', [$post, $galleryImages[0]]))
+        ->assertOk()
+        ->assertHeader('Content-Type', 'image/png')
+        ->assertHeader('X-Content-Type-Options', 'nosniff');
+});
+
+it('requires a description for each gallery photo', function () {
+    Storage::fake('local');
+
+    $this->actingAs(User::factory()->admin()->create())
+        ->post(route('admin.news.store'), [
+            'title' => 'Research celebration',
+            'category' => 'Achievement',
+            'body' => 'The university celebrated the research team.',
+            'is_published' => true,
+            'gallery_images' => [
+                UploadedFile::fake()->image('award.png', 800, 600),
+                UploadedFile::fake()->image('team.jpg', 900, 600),
+            ],
+            'gallery_image_alts' => ['The team receiving the award'],
+        ])
+        ->assertSessionHasErrors('gallery_image_alts');
+
+    expect(NewsPost::query()->count())->toBe(0);
+});
+
 it('rejects tiny or invalid cover images and unknown categories, and hides covers of drafts', function () {
     Storage::fake('local');
     $admin = User::factory()->admin()->create();

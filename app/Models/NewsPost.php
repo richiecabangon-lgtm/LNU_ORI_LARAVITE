@@ -35,6 +35,21 @@ class NewsPost extends Model
         return $this->hasMany(NewsAttachment::class);
     }
 
+    public function views(): HasMany
+    {
+        return $this->hasMany(NewsPostView::class);
+    }
+
+    public function reactions(): HasMany
+    {
+        return $this->hasMany(NewsPostReaction::class);
+    }
+
+    public function comments(): HasMany
+    {
+        return $this->hasMany(NewsComment::class);
+    }
+
     public function author(): BelongsTo
     {
         return $this->belongsTo(User::class, 'created_by');

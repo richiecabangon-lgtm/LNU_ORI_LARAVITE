@@ -65,3 +65,56 @@ it('rejects a department that does not belong to the selected college', function
 
     expect(User::query()->where('email', 'mismatch@example.edu')->exists())->toBeFalse();
 });
+
+it('allows admins to reassign an existing faculty member to another college and department', function () {
+    $admin = User::factory()->admin()->create();
+    $college = College::query()->create(['code' => 'UC4', 'name' => 'Original College']);
+    $department = Department::query()->create(['college_id' => $college->id, 'code' => 'UD4', 'name' => 'Original Department']);
+    $newCollege = College::query()->create(['code' => 'UC5', 'name' => 'New College']);
+    $newDepartment = Department::query()->create(['college_id' => $newCollege->id, 'code' => 'UD5', 'name' => 'New Department']);
+    $faculty = User::factory()->faculty()->create(['college_id' => $college->id, 'department_id' => $department->id]);
+
+    $this->actingAs($admin)->put(route('admin.users.update', $faculty), [
+        'name' => $faculty->name,
+        'email' => $faculty->email,
+        'role' => 'faculty',
+        'employee_id' => $faculty->employee_id,
+        'college_id' => $newCollege->id,
+        'department_id' => $newDepartment->id,
+        'designation' => $faculty->designation,
+        'academic_rank' => $faculty->academic_rank,
+        'is_active' => true,
+    ])->assertRedirect()->assertSessionHasNoErrors();
+
+    $this->assertDatabaseHas('users', [
+        'id' => $faculty->id,
+        'college_id' => $newCollege->id,
+        'department_id' => $newDepartment->id,
+    ]);
+});
+
+it('rejects admin reassignment to a department from another college', function () {
+    $admin = User::factory()->admin()->create();
+    $college = College::query()->create(['code' => 'UC6', 'name' => 'Selected College']);
+    $otherCollege = College::query()->create(['code' => 'UC7', 'name' => 'Other College']);
+    $otherDepartment = Department::query()->create(['college_id' => $otherCollege->id, 'code' => 'UD7', 'name' => 'Other Department']);
+    $faculty = User::factory()->faculty()->create();
+
+    $this->actingAs($admin)->from(route('admin.users.index'))->put(route('admin.users.update', $faculty), [
+        'name' => $faculty->name,
+        'email' => $faculty->email,
+        'role' => 'faculty',
+        'employee_id' => $faculty->employee_id,
+        'college_id' => $college->id,
+        'department_id' => $otherDepartment->id,
+        'designation' => $faculty->designation,
+        'academic_rank' => $faculty->academic_rank,
+        'is_active' => true,
+    ])->assertRedirect(route('admin.users.index'))->assertSessionHasErrors('department_id');
+
+    $this->assertDatabaseHas('users', [
+        'id' => $faculty->id,
+        'college_id' => null,
+        'department_id' => null,
+    ]);
+});

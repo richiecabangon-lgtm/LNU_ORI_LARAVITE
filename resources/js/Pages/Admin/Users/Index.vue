@@ -10,18 +10,19 @@ const props = defineProps<{
     users: any;
     filters: { role?: string; search?: string };
     roles: Array<{ value: string; label: string }>;
-    colleges: Array<{ id: number; name: string }>;
-    departments: Array<{ id: number; name: string; college_id: number }>;
+    colleges: Array<{ id: number; name: string; is_active: boolean }>;
+    departments: Array<{ id: number; name: string; college_id: number; is_active: boolean }>;
 }>();
 
 const search = ref(props.filters.search || '');
 const role = ref(props.filters.role || '');
 const showForm = ref(false);
+const editingUserId = ref<number | null>(null);
 
 const form = useForm({
     name: '',
     email: '',
-    password: '',
+    password: null as string | null,
     role: 'faculty',
     employee_id: '',
     college_id: '',
@@ -55,13 +56,42 @@ watch([search, role], () => {
 const createUser = () => {
     form.post(route('admin.users.store'), {
         onSuccess: () => {
-            form.reset();
-            form.role = 'faculty';
-            form.is_active = true;
-            showForm.value = false;
+            closeForm();
         },
     });
 };
+
+const editUser = (user: any) => {
+    editingUserId.value = user.id;
+    form.name = user.name;
+    form.email = user.email;
+    form.password = null;
+    form.role = user.role;
+    form.employee_id = user.employee_id ?? '';
+    form.college_id = user.college_id ? String(user.college_id) : '';
+    form.department_id = user.department_id ? String(user.department_id) : '';
+    form.designation = user.designation ?? '';
+    form.academic_rank = user.academic_rank ?? '';
+    form.is_active = user.is_active;
+    form.clearErrors();
+    showForm.value = true;
+};
+
+const updateUser = () => {
+    if (editingUserId.value === null) return;
+
+    form.put(route('admin.users.update', editingUserId.value), {
+        onSuccess: closeForm,
+    });
+};
+
+function closeForm() {
+    showForm.value = false;
+    editingUserId.value = null;
+    form.reset();
+    form.role = 'faculty';
+    form.is_active = true;
+}
 
 const toggleActive = (user: any) => {
     router.put(route('admin.users.update', user.id), {
@@ -86,15 +116,15 @@ const toggleActive = (user: any) => {
             description="Provision Faculty, Coordinator, and Admin accounts for sustainable ORI operations."
         >
             <template #actions>
-                <button type="button" class="ori-btn-accent" @click="showForm = !showForm">
+                <button type="button" class="ori-btn-accent" @click="showForm ? closeForm() : (showForm = true)">
                     {{ showForm ? 'Close form' : 'Add user' }}
                 </button>
             </template>
         </PageHeader>
 
         <div v-if="showForm" class="ori-card mb-6 p-6">
-            <h2 class="font-display text-xl font-semibold text-ori-blue-900">Create account</h2>
-            <form class="mt-4 grid gap-4 md:grid-cols-2" @submit.prevent="createUser">
+            <h2 class="font-display text-xl font-semibold text-ori-blue-900">{{ editingUserId === null ? 'Create account' : 'Edit user account' }}</h2>
+            <form class="mt-4 grid gap-4 md:grid-cols-2" @submit.prevent="editingUserId === null ? createUser() : updateUser()">
                 <div v-if="Object.keys(form.errors).length" role="alert" class="md:col-span-2 border border-rose-200 bg-rose-50 px-4 py-3 text-sm text-rose-800">
                     Please correct the highlighted fields before creating the account.
                 </div>
@@ -108,9 +138,14 @@ const toggleActive = (user: any) => {
                     <input v-model="form.email" type="email" class="ori-input" required />
                     <InputError :message="form.errors.email" class="mt-1" />
                 </div>
-                <div>
+                <div v-if="editingUserId === null">
                     <label class="ori-label">Temporary password</label>
                     <input v-model="form.password" type="password" class="ori-input" required />
+                    <InputError :message="form.errors.password" class="mt-1" />
+                </div>
+                <div v-else>
+                    <label class="ori-label">New password (optional)</label>
+                    <input v-model="form.password" type="password" class="ori-input" autocomplete="new-password" />
                     <InputError :message="form.errors.password" class="mt-1" />
                 </div>
                 <div>
@@ -139,7 +174,7 @@ const toggleActive = (user: any) => {
                     <label class="ori-label">College</label>
                     <select v-model="form.college_id" class="ori-input">
                         <option value="">Select college</option>
-                        <option v-for="college in colleges" :key="college.id" :value="college.id">{{ college.name }}</option>
+                        <option v-for="college in colleges" :key="college.id" :value="String(college.id)">{{ college.name }}{{ college.is_active ? '' : ' (inactive, current assignment)' }}</option>
                     </select>
                     <InputError :message="form.errors.college_id" class="mt-1" />
                 </div>
@@ -147,12 +182,16 @@ const toggleActive = (user: any) => {
                     <label class="ori-label">Department</label>
                     <select v-model="form.department_id" class="ori-input" :disabled="!form.college_id">
                         <option value="">{{ form.college_id ? 'Select department' : 'Select a college first' }}</option>
-                        <option v-for="dept in filteredDepartments" :key="dept.id" :value="dept.id">{{ dept.name }}</option>
+                        <option v-for="dept in filteredDepartments" :key="dept.id" :value="String(dept.id)">{{ dept.name }}{{ dept.is_active ? '' : ' (inactive, current assignment)' }}</option>
                     </select>
                     <InputError :message="form.errors.department_id" class="mt-1" />
                 </div>
                 <div class="md:col-span-2">
-                    <button type="submit" class="ori-btn-primary" :disabled="form.processing">{{ form.processing ? 'Creating…' : 'Create user' }}</button>
+                    <label v-if="editingUserId !== null" class="mb-4 flex items-center gap-2 text-sm text-ori-blue-800"><input v-model="form.is_active" type="checkbox" /> Active account</label>
+                    <div class="flex flex-wrap gap-3">
+                        <button type="submit" class="ori-btn-primary" :disabled="form.processing">{{ form.processing ? 'Saving…' : editingUserId === null ? 'Create user' : 'Save user' }}</button>
+                        <button v-if="editingUserId !== null" type="button" class="ori-btn-ghost" @click="closeForm">Cancel</button>
+                    </div>
                 </div>
             </form>
         </div>
@@ -198,9 +237,12 @@ const toggleActive = (user: any) => {
                             </span>
                         </td>
                         <td class="px-4 py-3 text-right">
-                            <button type="button" class="font-semibold text-ori-blue-700" @click="toggleActive(user)">
-                                {{ user.is_active ? 'Deactivate' : 'Activate' }}
-                            </button>
+                            <div class="flex flex-wrap justify-end gap-3">
+                                <button type="button" class="font-semibold text-ori-blue-700 hover:underline" @click="editUser(user)">Edit</button>
+                                <button type="button" class="font-semibold text-ori-blue-700 hover:underline" @click="toggleActive(user)">
+                                    {{ user.is_active ? 'Deactivate' : 'Activate' }}
+                                </button>
+                            </div>
                         </td>
                     </tr>
                 </tbody>

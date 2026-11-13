@@ -35,6 +35,8 @@ class UserController extends Controller
             ->orderBy('name')
             ->paginate(12)
             ->withQueryString();
+        $assignedCollegeIds = $users->getCollection()->pluck('college_id')->filter()->unique();
+        $assignedDepartmentIds = $users->getCollection()->pluck('department_id')->filter()->unique();
 
         return Inertia::render('Admin/Users/Index', [
             'users' => $users,
@@ -43,8 +45,14 @@ class UserController extends Controller
                 'value' => $role->value,
                 'label' => $role->label(),
             ]),
-            'colleges' => College::query()->where('is_active', true)->orderBy('name')->get(['id', 'name']),
-            'departments' => Department::query()->where('is_active', true)->orderBy('name')->get(['id', 'name', 'college_id']),
+            'colleges' => College::query()
+                ->where('is_active', true)
+                ->orWhereIn('id', $assignedCollegeIds)
+                ->orderBy('name')->get(['id', 'name', 'is_active']),
+            'departments' => Department::query()
+                ->where('is_active', true)
+                ->orWhereIn('id', $assignedDepartmentIds)
+                ->orderBy('name')->get(['id', 'name', 'college_id', 'is_active']),
         ]);
     }
 

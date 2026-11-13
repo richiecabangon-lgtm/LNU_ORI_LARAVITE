@@ -27,12 +27,15 @@ it('switches active staff workspaces and persists the selection without changing
     expect($staff->fresh()->role->value)->toBe($role);
 })->with(['coordinator', 'admin']);
 
-it('restores staff navigation on staff deep links without redirecting', function (string $role, string $staffRoute) {
+it('preserves the selected faculty workspace when visiting staff deep links', function (string $role, string $staffRoute) {
     $staff = User::factory()->{$role}()->create();
     $this->actingAs($staff)->post(route('workspace.switch'), ['workspace' => 'faculty']);
 
-    $this->get(route($staffRoute))->assertOk()->assertInertia(fn (Assert $page) => $page->where('workspace', 'staff'));
-    $this->get(route('news.index'))->assertInertia(fn (Assert $page) => $page->where('workspace', 'staff'));
+    $this->get(route($staffRoute))->assertOk()->assertInertia(fn (Assert $page) => $page->where('workspace', 'faculty'));
+    $this->get(route('news.index'))->assertInertia(fn (Assert $page) => $page->where('workspace', 'faculty'));
+
+    $this->post(route('workspace.switch'), ['workspace' => 'staff'])->assertRedirect(route('dashboard'));
+    $this->get(route('dashboard'))->assertInertia(fn (Assert $page) => $page->where('workspace', 'staff'));
 })->with([
     ['coordinator', 'coordinator.evaluations.index'],
     ['admin', 'admin.approvals.index'],

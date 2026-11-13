@@ -209,13 +209,14 @@ function removeComment(comment: Comment) {
             </section>
             <div class="max-w-3xl whitespace-pre-line text-base leading-8 text-ori-blue-900">{{ post.body }}</div>
             <section class="mt-10 max-w-3xl border-y border-ori-blue-100 py-5" aria-label="News engagement">
-                <div class="flex flex-wrap items-center justify-between gap-3">
+                <div class="flex items-center justify-between gap-4">
                     <p class="text-sm font-medium text-ori-blue-700"><span class="font-semibold text-ori-blue-900">{{ new Intl.NumberFormat().format(post.view_count) }}</span> {{ post.view_count === 1 ? 'view' : 'views' }}</p>
-                    <div ref="reactionPickerRoot" class="relative">
+                    <div class="ms-auto flex min-w-0 flex-wrap items-center justify-end gap-3">
+                        <div ref="reactionPickerRoot" class="relative">
                         <button
                             ref="reactionTrigger"
                             type="button"
-                            class="inline-flex min-h-10 items-center gap-2 border border-ori-blue-100 bg-white px-3 text-sm font-semibold text-ori-blue-700 transition hover:bg-ori-blue-50 focus-visible:outline focus-visible:outline-2 focus-visible:outline-ori-blue-700 select-none"
+                            class="inline-flex min-h-10 items-center gap-2 rounded-full px-3 text-sm font-semibold text-ori-blue-700 transition-colors hover:bg-ori-blue-50 hover:text-ori-blue-900 focus-visible:outline focus-visible:outline-2 focus-visible:outline-ori-blue-700 select-none"
                             :aria-label="selectedReaction ? `Your reaction is ${selectedReaction.label}. Hold or use the down arrow to change it.` : 'Like this announcement, or hold to choose a reaction.'"
                             aria-haspopup="true"
                             :aria-expanded="reactionPickerOpen"
@@ -230,7 +231,7 @@ function removeComment(comment: Comment) {
                             <span aria-hidden="true">{{ selectedReaction?.emoji ?? '👍' }}</span>
                             <span>{{ selectedReaction?.label ?? 'Like' }}</span>
                         </button>
-                        <div v-if="reactionPickerOpen" class="absolute bottom-full left-0 z-30 mb-2 flex gap-1 border border-ori-blue-100 bg-white p-2 shadow-lg" role="group" aria-label="Choose a reaction">
+                        <div v-if="reactionPickerOpen" class="absolute bottom-full right-0 z-30 mb-2 flex gap-1 border border-ori-blue-100 bg-white p-2 shadow-lg" role="group" aria-label="Choose a reaction">
                             <button
                                 v-for="(reaction, index) in reactionOptions"
                                 :key="reaction.value"
@@ -245,11 +246,12 @@ function removeComment(comment: Comment) {
                                 <span aria-hidden="true">{{ reaction.emoji }}</span>
                             </button>
                         </div>
-                    </div>
-                    <div v-if="totalReactionCount" class="flex items-center gap-2 text-sm text-ori-blue-600" aria-label="Reaction totals">
-                        <span v-for="reaction in activeReactionOptions" :key="reaction.value" :aria-label="`${reaction.label}: ${post.reaction_counts[reaction.value]}`">
-                            <span aria-hidden="true">{{ reaction.emoji }}</span> {{ post.reaction_counts[reaction.value] }}
-                        </span>
+                        </div>
+                        <div v-if="totalReactionCount" class="flex flex-wrap items-center justify-end gap-2 text-sm text-ori-blue-600" aria-label="Reaction totals">
+                            <span v-for="reaction in activeReactionOptions" :key="reaction.value" :aria-label="`${reaction.label}: ${post.reaction_counts[reaction.value]}`">
+                                <span aria-hidden="true">{{ reaction.emoji }}</span> {{ post.reaction_counts[reaction.value] }}
+                            </span>
+                        </div>
                     </div>
                 </div>
             </section>

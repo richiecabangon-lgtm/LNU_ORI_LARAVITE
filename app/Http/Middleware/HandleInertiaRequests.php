@@ -35,14 +35,6 @@ class HandleInertiaRequests extends Middleware
             && ($workspace['role'] ?? null) === $user->role->value
             && ($workspace['selection'] ?? null) === 'faculty';
 
-        if ($isFacultyWorkspace && $request->isMethod('GET') && (
-            $request->routeIs('dashboard', 'admin.*', 'coordinator.*', 'reports.fpes', 'research-profiles.index')
-            || ($request->routeIs('research-profiles.show') && (string) $request->route('user')?->id !== (string) $user->id)
-        )) {
-            $request->session()->forget('workspace');
-            $isFacultyWorkspace = false;
-        }
-
         return [
             ...parent::share($request),
             'workspace' => $isFacultyWorkspace || $user?->isFaculty() ? 'faculty' : 'staff',
